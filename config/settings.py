@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'notifications',
     'reviews',
     'support',
+    'flights',
 ]
 
 MIDDLEWARE = [
@@ -187,6 +188,16 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Speed up password hashing in development for faster login/signup
+if DEBUG:
+    PASSWORD_HASHERS = [
+        "django.contrib.auth.hashers.MD5PasswordHasher",
+        "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+        "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+        "django.contrib.auth.hashers.BcryptSHA256PasswordHasher",
+        "django.contrib.auth.hashers.BcryptPasswordHasher",
+    ]
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 LANGUAGE_CODE = 'en-us'
@@ -308,6 +319,13 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# Cache Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
 
 # Cloudinary Integration (Mocked if credentials are dummy)
 import cloudinary

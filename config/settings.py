@@ -191,7 +191,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Speed up password hashing in development for faster login/signup
 if DEBUG:
     PASSWORD_HASHERS = [
-        "django.contrib.auth.hashers.MD5PasswordHasher",
+        "users.hashers.FastPBKDF2PasswordHasher",
         "django.contrib.auth.hashers.PBKDF2PasswordHasher",
         "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
         "django.contrib.auth.hashers.BcryptSHA256PasswordHasher",

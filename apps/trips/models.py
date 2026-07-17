@@ -5,6 +5,8 @@ class Trip(models.Model):
     STATUS_CHOICES = (
         ('Active', 'Active'),
         ('Completed', 'Completed'),
+        ('Paused', 'Paused'),
+        ('Archived', 'Archived'),
         ('Cancelled', 'Cancelled'),
     )
 
@@ -30,6 +32,8 @@ class Trip(models.Model):
     
     capacity_weight = models.DecimalField(max_digits=5, decimal_places=2, default=23.00)
     available_weight = models.DecimalField(max_digits=5, decimal_places=2, default=23.00)
+    price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=10.00)
+    accepted_parcel_types = models.JSONField(default=list)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
     
     created_at = models.DateTimeField(auto_now_add=True)

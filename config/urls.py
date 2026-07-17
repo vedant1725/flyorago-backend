@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from profiles.views import KYCStatusView, KYCSubmitView, KYCAdminListView, KYCAdminActionView
+from bookings.views import MatchTravellerListView, MatchShipmentListView
 from config.views import api_root
 
 urlpatterns = [
@@ -33,4 +34,8 @@ urlpatterns = [
     path('api/reviews/', include('reviews.urls')),
     path('api/support/', include('support.urls')),
     path('api/flights/', include('flights.urls')),
+    
+    # Matching Engine
+    path('api/matches/find-travellers/<int:shipment_id>/', MatchTravellerListView.as_view(), name='match_travellers_root'),
+    path('api/matches/find-shipments/<int:trip_id>/', MatchShipmentListView.as_view(), name='match_shipments_root'),
 ]

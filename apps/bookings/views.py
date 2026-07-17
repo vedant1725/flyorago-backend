@@ -7,7 +7,11 @@ from drf_spectacular.utils import extend_schema
 from .models import Booking
 from .serializers import BookingSerializer, BookingCreateSerializer, BookingActionRequestSerializer
 from trips.models import Trip
+from trips.serializers import TripSerializer
+from shipments.models import Shipment
+from shipments.serializers import ShipmentSerializer
 from common.responses import success_response, failure_response
+from .services import MatchingService
 
 
 class BookingListCreateView(generics.ListCreateAPIView):
@@ -101,7 +105,7 @@ class BookingActionView(views.APIView):
         if action == 'ACCEPT':
             if not is_traveler and not is_admin:
                 return failure_response(message="Only the traveler or admin can accept a booking")
-            if booking.status != 'Pending' and not is_admin:
+            if booking.status != 'Booking Requested' and booking.status != 'Pending' and not is_admin:
                 return failure_response(message="Can only accept pending bookings")
             booking.status = 'Accepted'
             booking.save()
@@ -131,7 +135,7 @@ class BookingActionView(views.APIView):
             booking.save()
             return success_response(data=BookingSerializer(booking).data, message="Booking cancelled")
 
-        elif action == 'DEPOSIT_ESCROW':
+        elif action in ['MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW']:
             if not is_sender and not is_admin:
                 return failure_response(message="Only the sender or admin can deposit funds")
             if booking.status != 'Accepted' and not is_admin:
@@ -140,25 +144,122 @@ class BookingActionView(views.APIView):
             booking.escrow_status = 'Active Hold'
             booking.save()
             
-            # In a real wallet flow, record a transaction. Covered in wallet/payments apps.
-            return success_response(data=BookingSerializer(booking).data, message="Funds deposited to Escrow")
+            # Trigger Mindblowing Multi-Level Notification
+            from notifications.services import MultiLevelNotificationEngine
+            MultiLevelNotificationEngine.notify_payment_secured(booking)
+            
+            return success_response(data=BookingSerializer(booking).data, message="Payment secured in Escrow")
+            
+        elif action == 'SCHEDULE_PICKUP':
+            if booking.status != 'Payment Completed' and not is_admin:
+                return failure_response(message="Payment must be completed first")
+            booking.status = 'Pickup Scheduled'
+            # Could set pickup time from request.data.get('payload') here
+            booking.save()
+            return success_response(data=BookingSerializer(booking).data, message="Pickup Scheduled")
 
-        elif action == 'RELEASE_ESCROW':
-            if booking.status != 'Delivered' and not is_admin:
-                return failure_response(message="Can only release escrow for delivered packages")
+        elif action == 'VERIFY_PARCEL':
+            if not is_traveler and not is_admin:
+                return failure_response(message="Only traveller can verify parcel")
+            
+            booking.status = 'Parcel Verification'
+            booking.save()
+
+            # Process images and mock AI Risk Analysis
+            from shipments.services import AIRiskService
+            from shipments.models import ShipmentImage
+            payload = request.data.get('payload') or {}
+            images = payload.get('images', [])
+            
+            if hasattr(booking, 'shipment'):
+                for img_url in images:
+                    ShipmentImage.objects.create(
+                        shipment=booking.shipment,
+                        image_url=img_url,
+                        is_verification_image=True,
+                        gps_location=payload.get('gps_location')
+                    )
+
+            risk_result = AIRiskService.analyze_verification_images(images)
+            if risk_result['status'] == 'High Risk':
+                booking.status = 'Risk Analysis'
+                booking.save()
+                return success_response(data=BookingSerializer(booking).data, message="High Risk detected! Sent for admin review.")
+            
+            booking.status = 'Ready For Transit'
+            booking.save()
+            return success_response(data=BookingSerializer(booking).data, message="Verification passed. Ready for Transit.")
+
+        elif action == 'START_TRANSIT':
+            booking.status = 'In Transit'
+            if hasattr(booking, 'shipment'):
+                booking.shipment.status = 'In Transit'
+                booking.shipment.save()
+            booking.save()
+            return success_response(data=BookingSerializer(booking).data, message="Transit started")
+
+        elif action == 'FLIGHT_LANDED':
+            booking.status = 'Flight Landed'
+            booking.save()
+            return success_response(data=BookingSerializer(booking).data, message="Flight landed")
+
+        elif action == 'OUT_FOR_DELIVERY':
+            booking.status = 'Out For Delivery'
+            if hasattr(booking, 'shipment'):
+                booking.shipment.status = 'Out for Handoff'
+                booking.shipment.save()
+            booking.save()
+            return success_response(data=BookingSerializer(booking).data, message="Out for delivery")
+
+        elif action in ['CONFIRM_DELIVERY', 'RELEASE_ESCROW']:
+            booking.status = 'Delivered'
+            booking.save()
+            
+            # Immediately Release Escrow upon Delivery
             booking.status = 'Completed'
             booking.payment_status = 'Released'
             booking.escrow_status = 'Released'
+            if hasattr(booking, 'shipment'):
+                booking.shipment.status = 'Delivered'
+                booking.shipment.save()
             booking.save()
 
-            # Record completed trip statistics
+            # Record completed trip statistics and trust score
             try:
                 profile = booking.traveler.profile
                 profile.completed_trips += 1
+                profile.trust_score += 5
                 profile.save()
             except Exception:
                 pass
                 
-            return success_response(data=BookingSerializer(booking).data, message="Escrow released successfully")
+            return success_response(data=BookingSerializer(booking).data, message="Delivery confirmed. Escrow released.")
 
         return failure_response(message="Invalid action name")
+
+
+class MatchTravellerListView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = TripSerializer
+
+    def get_queryset(self):
+        shipment_id = self.kwargs.get('shipment_id')
+        return MatchingService.find_compatible_trips_for_shipment(shipment_id)
+        
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return success_response(data=serializer.data, message="Compatible travellers found")
+
+class MatchShipmentListView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ShipmentSerializer
+
+    def get_queryset(self):
+        trip_id = self.kwargs.get('trip_id')
+        return MatchingService.find_compatible_shipments_for_trip(trip_id)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return success_response(data=serializer.data, message="Compatible shipments found")

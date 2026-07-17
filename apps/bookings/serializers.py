@@ -79,7 +79,17 @@ class BookingCreateSerializer(serializers.ModelSerializer):
 
 class BookingActionRequestSerializer(serializers.Serializer):
     action = serializers.ChoiceField(
-        choices=['ACCEPT', 'REJECT', 'CANCEL', 'DEPOSIT_ESCROW', 'RELEASE_ESCROW'],
+        choices=[
+            'ACCEPT', 'REJECT', 'CANCEL', 
+            'MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW',
+            'SCHEDULE_PICKUP',
+            'VERIFY_PARCEL',
+            'START_TRANSIT',
+            'FLIGHT_LANDED',
+            'OUT_FOR_DELIVERY',
+            'CONFIRM_DELIVERY', 'RELEASE_ESCROW'
+        ],
         required=True
     )
+    payload = serializers.JSONField(required=False, allow_null=True)
 

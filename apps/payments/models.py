@@ -28,3 +28,21 @@ class Invoice(models.Model):
 
     def __str__(self):
         return f"Invoice {self.invoice_number} (Booking #{self.booking.id})"
+
+class PaymentRecord(models.Model):
+    STATUS_CHOICES = (
+        ('Success', 'Success'),
+        ('Failed', 'Failed'),
+        ('Refunded', 'Refunded'),
+    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payment_records')
+    booking = models.ForeignKey(Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_records')
+    transaction_id = models.CharField(max_length=100, unique=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Success')
+    failure_reason = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"PaymentRecord {self.transaction_id} - ${self.amount} ({self.status})"

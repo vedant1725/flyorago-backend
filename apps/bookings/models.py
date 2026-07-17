@@ -4,13 +4,23 @@ from trips.models import Trip
 
 class Booking(models.Model):
     STATUS_CHOICES = (
-        ('Pending', 'Pending'),
-        ('Accepted', 'Accepted'),
-        ('Rejected', 'Rejected'),
-        ('Cancelled', 'Cancelled'),
+        ('Draft', 'Draft'),
+        ('Waiting Traveller', 'Waiting Traveller'),
+        ('Booking Requested', 'Booking Requested'),
+        ('Traveller Accepted', 'Traveller Accepted'),
+        ('Payment Pending', 'Payment Pending'),
+        ('Payment Completed', 'Payment Completed'),
+        ('Pickup Scheduled', 'Pickup Scheduled'),
+        ('Parcel Verification', 'Parcel Verification'),
+        ('Risk Analysis', 'Risk Analysis'),
+        ('Ready For Transit', 'Ready For Transit'),
         ('In Transit', 'In Transit'),
+        ('Flight Landed', 'Flight Landed'),
+        ('Out For Delivery', 'Out For Delivery'),
         ('Delivered', 'Delivered'),
         ('Completed', 'Completed'),
+        ('Rejected', 'Rejected'),
+        ('Cancelled', 'Cancelled'),
     )
 
     PAYMENT_STATUS_CHOICES = (
@@ -21,7 +31,7 @@ class Booking(models.Model):
     )
 
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sender_bookings')
-    traveler = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='traveler_bookings')
+    traveler = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='traveler_bookings', null=True, blank=True)
     trip = models.ForeignKey(Trip, on_delete=models.SET_NULL, null=True, related_name='bookings')
     
     package_name = models.CharField(max_length=150)
@@ -30,8 +40,9 @@ class Booking(models.Model):
     
     weight = models.DecimalField(max_digits=5, decimal_places=2)  # in kgs
     reward = models.DecimalField(max_digits=10, decimal_places=2)  # reward amount
+    pickup_scheduled_time = models.DateTimeField(null=True, blank=True)
     
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='Draft')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='Unpaid')
     escrow_status = models.CharField(max_length=20, null=True, blank=True) # e.g. 'Active Hold', 'Released'
     

@@ -61,3 +61,54 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.email} ({self.get_role_display()})"
+
+class OTPVerification(models.Model):
+    PURPOSE_CHOICES = (
+        ('registration', 'Registration'),
+        ('login', 'Login'),
+        ('password_reset', 'Password Reset'),
+        ('phone_verification', 'Phone Verification'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otp_history')
+    code = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=50, choices=PURPOSE_CHOICES)
+    is_used = models.BooleanField(default=False)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"OTP for {self.user.email} ({self.purpose})"
+
+class DeviceSession(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='device_sessions')
+    device_name = models.CharField(max_length=255)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    location = models.CharField(max_length=255, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    last_active = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.device_name} - {self.user.email}"
+
+class ActivityLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='activity_logs')
+    action = models.CharField(max_length=255)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    details = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.action}"
+
+class AdminLog(models.Model):
+    admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name='admin_logs')
+    target_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='targeted_admin_logs')
+    action = models.CharField(max_length=255)
+    details = models.JSONField(default=dict)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Admin {self.admin.email} - {self.action}"
+

@@ -27,6 +27,9 @@ class Shipment(models.Model):
     pickup_address = models.CharField(max_length=300)
     delivery_address = models.CharField(max_length=300)
     dimensions = models.CharField(max_length=100, default='Standard size')
+    category = models.CharField(max_length=100, default='General')
+    description = models.TextField(blank=True, null=True)
+    declared_value = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     insurance = models.CharField(max_length=50, choices=INSURANCE_CHOICES, default='Basic Coverage')
     eta = models.CharField(max_length=100, default='Next 3-5 days')
     
@@ -62,3 +65,14 @@ class ShipmentLog(models.Model):
 
     def __str__(self):
         return f"[{self.timestamp.strftime('%Y-%m-%d %H:%M')}] {self.status} - {self.description}"
+
+class ShipmentImage(models.Model):
+    shipment = models.ForeignKey(Shipment, on_delete=models.CASCADE, related_name='images')
+    image_url = models.TextField()
+    is_verification_image = models.BooleanField(default=False)
+    gps_location = models.CharField(max_length=255, null=True, blank=True)
+    condition_notes = models.TextField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Image for {self.shipment.tracking_number} (Verification: {self.is_verification_image})"

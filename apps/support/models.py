@@ -48,3 +48,26 @@ class TicketReply(models.Model):
 
     def __str__(self):
         return f"Reply on Ticket #{self.ticket.id} by {self.sender.email}"
+
+class Dispute(models.Model):
+    STATUS_CHOICES = (
+        ('Open', 'Open'),
+        ('Under Review', 'Under Review'),
+        ('Resolved', 'Resolved'),
+        ('Closed', 'Closed'),
+    )
+    
+    booking = models.ForeignKey('bookings.Booking', on_delete=models.CASCADE, related_name='disputes')
+    raised_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='raised_disputes')
+    reason = models.CharField(max_length=255)
+    description = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Open')
+    resolution = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Dispute on Booking #{self.booking.id} by {self.raised_by.email} ({self.status})"

@@ -9,10 +9,11 @@ from .models import Shipment, ShipmentLog
 from .serializers import ShipmentSerializer, ShipmentCreateSerializer, ShipmentUpdateStatusRequestSerializer
 from bookings.models import Booking
 from common.responses import success_response, failure_response
+from common.permissions import IsKYCApproved
 
 
 class ShipmentListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -80,7 +81,7 @@ class ShipmentDetailView(generics.RetrieveAPIView):
         return success_response(data=serializer.data, message="Shipment details fetched")
 
 class ShipmentUpdateStatusView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = ShipmentUpdateStatusRequestSerializer
 
     @extend_schema(request=ShipmentUpdateStatusRequestSerializer, responses={200: ShipmentSerializer})

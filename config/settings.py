@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'reviews',
     'support',
     'flights',
+    'apps.trust_scores',
 ]
 
 MIDDLEWARE = [

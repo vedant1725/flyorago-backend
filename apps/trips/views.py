@@ -3,9 +3,10 @@ from django.db.models import Q
 from .models import Trip
 from .serializers import TripSerializer, TripCreateSerializer
 from common.responses import success_response, failure_response
+from common.permissions import IsKYCApproved
 
 class TripListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -61,7 +62,7 @@ class TripListCreateView(generics.ListCreateAPIView):
         return failure_response(errors=serializer.errors, message="Failed to create trip")
 
 class TripDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = TripSerializer
     queryset = Trip.objects.all().select_related('user')
 

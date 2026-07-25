@@ -8,11 +8,12 @@ from .models import Review
 from .serializers import ReviewSerializer, ReviewCreateSerializer
 from profiles.models import Profile
 from common.responses import success_response, failure_response
+from common.permissions import IsKYCApproved
 
 User = get_user_model()
 
 class ReviewListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':

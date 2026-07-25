@@ -6,11 +6,12 @@ from django.contrib.auth import get_user_model
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer
 from common.responses import success_response, failure_response
+from common.permissions import IsKYCApproved
 
 User = get_user_model()
 
 class ConversationListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = ConversationSerializer
 
     def get_queryset(self):
@@ -47,7 +48,7 @@ class ConversationListCreateView(generics.ListCreateAPIView):
         return success_response(data=serializer.data, message="Conversation created successfully", status_code=status.HTTP_201_CREATED)
 
 class MessageListView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = MessageSerializer
 
     def get_queryset(self):

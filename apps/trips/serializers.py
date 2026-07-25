@@ -10,11 +10,11 @@ class TripSerializer(serializers.ModelSerializer):
     class Meta:
         model = Trip
         fields = (
-            'id', 'flight_number', 'airline', 'aircraft',
+            'id', 'user', 'flight_number', 'airline', 'aircraft',
             'from_location', 'to_location', 'from_airport', 'to_airport',
             'departure_date', 'departure_time', 'arrival_date', 'arrival_time',
             'duration', 'terminal_from', 'terminal_to', 'seats',
-            'capacity_weight', 'available_weight', 'status', 'created_at',
+            'capacity_weight', 'available_weight', 'accepted_parcel_types', 'status', 'created_at',
             'bookings_count', 'progress', 'traveler_name', 'traveler_email'
         )
         read_only_fields = ('id', 'created_at', 'available_weight')
@@ -37,7 +37,7 @@ class TripCreateSerializer(serializers.ModelSerializer):
             'from_location', 'to_location', 'from_airport', 'to_airport',
             'departure_date', 'departure_time', 'arrival_date', 'arrival_time',
             'duration', 'terminal_from', 'terminal_to', 'seats',
-            'capacity_weight'
+            'capacity_weight', 'accepted_parcel_types'
         )
 
     def create(self, validated_data):

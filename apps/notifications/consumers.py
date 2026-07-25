@@ -37,3 +37,12 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'type': 'new_match',
             'message': event['message']
         }))
+
+    async def booking_status_update(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def dispute_update(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def wallet_update(self, event):
+        await self.send(text_data=json.dumps(event))

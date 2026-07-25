@@ -11,11 +11,12 @@ from trips.serializers import TripSerializer
 from shipments.models import Shipment
 from shipments.serializers import ShipmentSerializer
 from common.responses import success_response, failure_response
+from common.permissions import IsKYCApproved
 from .services import MatchingService
 
 
 class BookingListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -64,7 +65,7 @@ class BookingListCreateView(generics.ListCreateAPIView):
             booking = serializer.save(
                 sender=request.user,
                 traveler=trip.user,
-                status='Pending'
+                status='REQUEST_SENT'
             )
             
             full_data = BookingSerializer(booking).data
@@ -82,19 +83,19 @@ class BookingDetailView(generics.RetrieveAPIView):
         return success_response(data=serializer.data, message="Booking details retrieved")
 
 class BookingActionView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = BookingActionRequestSerializer
 
     @extend_schema(request=BookingActionRequestSerializer, responses={200: BookingSerializer})
     @transaction.atomic
     def post(self, request, pk):
+        from .services import BookingWorkflowService
         booking = get_object_or_404(Booking, pk=pk)
         action = request.data.get('action')
 
         if not action:
             return failure_response(message="Action is required")
 
-        # Authorization Checks
         is_sender = (booking.sender == request.user)
         is_traveler = (booking.traveler == request.user)
         is_admin = (request.user.role == 'admin' or request.user.is_staff)
@@ -102,140 +103,93 @@ class BookingActionView(views.APIView):
         if not is_sender and not is_traveler and not is_admin:
             return failure_response(message="Unauthorized action", status_code=status.HTTP_403_FORBIDDEN)
 
-        if action == 'ACCEPT':
-            if not is_traveler and not is_admin:
-                return failure_response(message="Only the traveler or admin can accept a booking")
-            if booking.status != 'Booking Requested' and booking.status != 'Pending' and not is_admin:
-                return failure_response(message="Can only accept pending bookings")
-            booking.status = 'Accepted'
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Booking accepted")
+        try:
+            if action == 'SEND_REQUEST':
+                if not is_sender and not is_admin:
+                    return failure_response(message="Only sender can send request")
+                booking = BookingWorkflowService.send_request(booking)
+                return success_response(data=BookingSerializer(booking).data, message="Booking request sent")
 
-        elif action == 'REJECT':
-            if not is_traveler and not is_admin:
-                return failure_response(message="Only the traveler or admin can reject a booking")
-            if booking.status != 'Pending' and not is_admin:
-                return failure_response(message="Can only reject pending bookings")
-            booking.status = 'Rejected'
-            # Release trip weight allocation
-            if booking.trip:
-                booking.trip.available_weight += booking.weight
-                booking.trip.save()
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Booking rejected")
+            elif action == 'ACCEPT':
+                if not is_traveler and not is_admin:
+                    return failure_response(message="Only traveler can accept")
+                booking = BookingWorkflowService.accept_request(booking)
+                return success_response(data=BookingSerializer(booking).data, message="Booking accepted")
 
-        elif action == 'CANCEL':
-            if booking.status not in ['Pending', 'Accepted'] and not is_admin:
-                return failure_response(message="Cannot cancel booking at this stage")
-            booking.status = 'Cancelled'
-            # Release trip weight allocation
-            if booking.trip:
-                booking.trip.available_weight += booking.weight
-                booking.trip.save()
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Booking cancelled")
-
-        elif action in ['MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW']:
-            if not is_sender and not is_admin:
-                return failure_response(message="Only the sender or admin can deposit funds")
-            if booking.status != 'Accepted' and not is_admin:
-                return failure_response(message="Can only fund accepted bookings")
-            booking.payment_status = 'Escrow Hold'
-            booking.escrow_status = 'Active Hold'
-            booking.save()
-            
-            # Trigger Mindblowing Multi-Level Notification
-            from notifications.services import MultiLevelNotificationEngine
-            MultiLevelNotificationEngine.notify_payment_secured(booking)
-            
-            return success_response(data=BookingSerializer(booking).data, message="Payment secured in Escrow")
-            
-        elif action == 'SCHEDULE_PICKUP':
-            if booking.status != 'Payment Completed' and not is_admin:
-                return failure_response(message="Payment must be completed first")
-            booking.status = 'Pickup Scheduled'
-            # Could set pickup time from request.data.get('payload') here
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Pickup Scheduled")
-
-        elif action == 'VERIFY_PARCEL':
-            if not is_traveler and not is_admin:
-                return failure_response(message="Only traveller can verify parcel")
-            
-            booking.status = 'Parcel Verification'
-            booking.save()
-
-            # Process images and mock AI Risk Analysis
-            from shipments.services import AIRiskService
-            from shipments.models import ShipmentImage
-            payload = request.data.get('payload') or {}
-            images = payload.get('images', [])
-            
-            if hasattr(booking, 'shipment'):
-                for img_url in images:
-                    ShipmentImage.objects.create(
-                        shipment=booking.shipment,
-                        image_url=img_url,
-                        is_verification_image=True,
-                        gps_location=payload.get('gps_location')
-                    )
-
-            risk_result = AIRiskService.analyze_verification_images(images)
-            if risk_result['status'] == 'High Risk':
-                booking.status = 'Risk Analysis'
+            elif action == 'REJECT':
+                if not is_traveler and not is_admin:
+                    return failure_response(message="Only traveler can reject")
+                booking.status = 'REJECTED'
                 booking.save()
-                return success_response(data=BookingSerializer(booking).data, message="High Risk detected! Sent for admin review.")
-            
-            booking.status = 'Ready For Transit'
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Verification passed. Ready for Transit.")
+                BookingWorkflowService.trigger_websocket_notification(
+                    booking, 'rejected', f"Traveler rejected Booking #{booking.id}."
+                )
+                return success_response(data=BookingSerializer(booking).data, message="Booking rejected")
 
-        elif action == 'START_TRANSIT':
-            booking.status = 'In Transit'
-            if hasattr(booking, 'shipment'):
-                booking.shipment.status = 'In Transit'
-                booking.shipment.save()
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Transit started")
+            elif action == 'PAY':
+                if not is_sender and not is_admin:
+                    return failure_response(message="Only sender can pay")
+                booking = BookingWorkflowService.process_payment(booking)
+                return success_response(data=BookingSerializer(booking).data, message="Payment secured in Escrow")
 
-        elif action == 'FLIGHT_LANDED':
-            booking.status = 'Flight Landed'
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Flight landed")
+            elif action == 'VERIFY_PARCEL':
+                if not is_traveler and not is_admin:
+                    return failure_response(message="Only traveler can verify parcel")
+                booking = BookingWorkflowService.upload_verification(booking)
+                return success_response(data=BookingSerializer(booking).data, message="Parcel verified")
 
-        elif action == 'OUT_FOR_DELIVERY':
-            booking.status = 'Out For Delivery'
-            if hasattr(booking, 'shipment'):
-                booking.shipment.status = 'Out for Handoff'
-                booking.shipment.save()
-            booking.save()
-            return success_response(data=BookingSerializer(booking).data, message="Out for delivery")
+            elif action == 'START_TRANSIT':
+                if not is_traveler and not is_admin:
+                    return failure_response(message="Only traveler can start transit")
+                booking = BookingWorkflowService.update_transit_status(booking, 'IN_TRANSIT')
+                return success_response(data=BookingSerializer(booking).data, message="Transit started")
 
-        elif action in ['CONFIRM_DELIVERY', 'RELEASE_ESCROW']:
-            booking.status = 'Delivered'
-            booking.save()
-            
-            # Immediately Release Escrow upon Delivery
-            booking.status = 'Completed'
-            booking.payment_status = 'Released'
-            booking.escrow_status = 'Released'
-            if hasattr(booking, 'shipment'):
-                booking.shipment.status = 'Delivered'
-                booking.shipment.save()
-            booking.save()
+            elif action == 'ARRIVED':
+                if not is_traveler and not is_admin:
+                    return failure_response(message="Only traveler can mark arrived")
+                booking = BookingWorkflowService.update_transit_status(booking, 'ARRIVED')
+                return success_response(data=BookingSerializer(booking).data, message="Flight arrived")
 
-            # Record completed trip statistics and trust score
-            try:
-                profile = booking.traveler.profile
-                profile.completed_trips += 1
-                profile.trust_score += 5
-                profile.save()
-            except Exception:
-                pass
+            elif action == 'OUT_FOR_DELIVERY':
+                if not is_traveler and not is_admin:
+                    return failure_response(message="Only traveler can mark out for delivery")
                 
-            return success_response(data=BookingSerializer(booking).data, message="Delivery confirmed. Escrow released.")
+                # Generate OTP
+                calc_otp = str((booking.id * 3791 + 100000) % 900000 + 100000)
+                booking.delivery_otp = calc_otp
+                
+                booking = BookingWorkflowService.update_transit_status(booking, 'OUT_FOR_DELIVERY')
+                
+                BookingWorkflowService.trigger_websocket_notification(
+                    booking, 'otp_generated', f"OTP for Booking #{booking.id} has been generated."
+                )
+                return success_response(data=BookingSerializer(booking).data, message="Out for delivery. OTP Generated")
 
-        return failure_response(message="Invalid action name")
+            elif action == 'CONFIRM_DELIVERY':
+                input_otp = str(request.data.get('otp') or request.data.get('delivery_otp') or '').strip()
+                booking = BookingWorkflowService.complete_delivery(booking, input_otp)
+                
+                # Record completed trip statistics
+                try:
+                    profile = booking.traveler.profile
+                    profile.completed_trips += 1
+                    profile.trust_score += 5
+                    profile.save()
+                except Exception:
+                    pass
+                    
+                return success_response(data=BookingSerializer(booking).data, message="Delivery confirmed")
+
+            elif action == 'RELEASE_ESCROW':
+                if not is_admin:
+                    return failure_response(message="Only admin can release escrow manually")
+                booking = BookingWorkflowService.release_escrow(booking)
+                return success_response(data=BookingSerializer(booking).data, message="Escrow released")
+                
+            return failure_response(message="Invalid action name")
+            
+        except ValueError as e:
+            return failure_response(message=str(e))
 
 
 class MatchTravellerListView(generics.ListAPIView):

@@ -108,14 +108,15 @@ class KYCSubmitView(views.APIView):
 
         profile, created = Profile.objects.get_or_create(user=user)
         
-        profile.kyc_document_type = request.data.get('documentType', 'national_id')
+        profile.kyc_document_type = request.data.get('documentType', 'national_id_and_passport')
         profile.kyc_document_front = request.data.get('frontImage')
         profile.kyc_document_back = request.data.get('backImage')
+        profile.kyc_passport = request.data.get('passportImage')
         profile.kyc_selfie = request.data.get('selfieImage')
         profile.kyc_status = 'PENDING'
         profile.save()
 
-        return success_response(message="KYC details submitted for review")
+        return success_response(message="All mandatory KYC documents submitted successfully!")
 
 class KYCAdminListView(views.APIView):
     permission_classes = [permissions.AllowAny]
@@ -133,9 +134,10 @@ class KYCAdminListView(views.APIView):
                 'fullName': f"{u.first_name} {u.last_name}".strip() or u.email.split('@')[0],
                 'email': u.email,
                 'phone': u.phone_number or "",
-                'documentType': profile.kyc_document_type or "national_id",
+                'documentType': profile.kyc_document_type or "national_id_and_passport",
                 'frontImage': profile.kyc_document_front or "",
                 'backImage': profile.kyc_document_back or "",
+                'passportImage': profile.kyc_passport or "",
                 'selfieImage': profile.kyc_selfie or "",
                 'status': profile.kyc_status,
                 'rejectionReason': profile.kyc_rejection_reason or "",
@@ -170,6 +172,16 @@ class KYCAdminActionView(views.APIView):
             profile.kyc_rejection_reason = ""
             user.is_verified = True
             user.save()
+            # Award trust points for verified documents
+            try:
+                from trust_scores.signals import award_trust
+                award_trust(user, 'FACE_VERIFICATION', 'Face / Selfie Verified via KYC')
+                if profile.kyc_document_type in ('passport', 'national_id_and_passport') and profile.kyc_passport:
+                    award_trust(user, 'VERIFIED_PASSPORT', 'International Passport Verified')
+                if profile.kyc_document_type in ('national_id', 'national_id_and_passport', 'driving_license') and profile.kyc_document_front:
+                    award_trust(user, 'GOVERNMENT_ID', 'Government ID Verified')
+            except Exception:
+                pass
         elif action == 'REJECT':
             profile.kyc_status = 'REJECTED'
             profile.kyc_rejection_reason = reason or "Documents could not be verified."

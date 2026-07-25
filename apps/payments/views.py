@@ -14,9 +14,10 @@ from .serializers import (
 from bookings.models import Booking
 from wallet.models import Wallet, Transaction
 from common.responses import success_response, failure_response
+from common.permissions import IsKYCApproved
 
 class PaymentIntentCreateView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = PaymentIntentCreateRequestSerializer
 
     @extend_schema(request=PaymentIntentCreateRequestSerializer, responses={200: PaymentIntentSerializer})
@@ -41,7 +42,7 @@ class PaymentIntentCreateView(views.APIView):
         )
 
 class PaymentIntentConfirmView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = serializers.Serializer
 
     @extend_schema(request=None, responses={200: PaymentIntentConfirmResponseSerializer})

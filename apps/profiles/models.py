@@ -13,6 +13,7 @@ class Profile(models.Model):
         ('national_id', 'Government ID'),
         ('passport', 'International Passport'),
         ('driving_license', 'Driving License'),
+        ('national_id_and_passport', 'National ID & Passport'),
     )
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
@@ -29,9 +30,10 @@ class Profile(models.Model):
     
     # KYC Details
     kyc_status = models.CharField(max_length=20, choices=KYC_STATUS_CHOICES, default='NOT_SUBMITTED')
-    kyc_document_type = models.CharField(max_length=20, choices=DOC_TYPE_CHOICES, default='national_id')
+    kyc_document_type = models.CharField(max_length=30, choices=DOC_TYPE_CHOICES, default='national_id_and_passport')
     kyc_document_front = models.TextField(null=True, blank=True)  # Store base64 or URL
     kyc_document_back = models.TextField(null=True, blank=True)
+    kyc_passport = models.TextField(null=True, blank=True)
     kyc_selfie = models.TextField(null=True, blank=True)
     kyc_rejection_reason = models.TextField(null=True, blank=True)
     
@@ -65,9 +67,10 @@ class Address(models.Model):
 
 class KYCDocument(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='kyc_documents')
-    document_type = models.CharField(max_length=20, choices=Profile.DOC_TYPE_CHOICES)
+    document_type = models.CharField(max_length=50, choices=Profile.DOC_TYPE_CHOICES)
     document_front = models.TextField() # URL or Base64
     document_back = models.TextField(null=True, blank=True)
+    document_passport = models.TextField(null=True, blank=True)
     selfie = models.TextField()
     status = models.CharField(max_length=20, choices=Profile.KYC_STATUS_CHOICES, default='PENDING')
     rejection_reason = models.TextField(null=True, blank=True)

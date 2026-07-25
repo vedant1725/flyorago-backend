@@ -14,6 +14,7 @@ from .serializers import (
     EarningsSummaryResponseSerializer
 )
 from common.responses import success_response, failure_response
+from common.permissions import IsKYCApproved
 
 class WalletSummaryView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -53,7 +54,7 @@ class TransactionDetailView(views.APIView):
         return success_response(data=serializer.data, message="Transaction receipt fetched")
 
 class PayoutMethodListCreateView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = PayoutMethodSerializer
 
     def get(self, request):
@@ -71,7 +72,7 @@ class PayoutMethodListCreateView(views.APIView):
         return failure_response(errors=serializer.errors, message="Failed to add payout method")
 
 class WithdrawView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = WithdrawSerializer
 
     @extend_schema(request=WithdrawSerializer, responses={200: TransactionSerializer})
@@ -106,7 +107,7 @@ class WithdrawView(views.APIView):
         return failure_response(errors=serializer.errors, message="Invalid withdrawal parameters")
 
 class DepositView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsKYCApproved]
     serializer_class = DepositSerializer
 
     @extend_schema(request=DepositSerializer, responses={200: TransactionSerializer})

@@ -71,3 +71,11 @@ class Dispute(models.Model):
 
     def __str__(self):
         return f"Dispute on Booking #{self.booking.id} by {self.raised_by.email} ({self.status})"
+
+class DisputeImage(models.Model):
+    dispute = models.ForeignKey(Dispute, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='disputes/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Image for Dispute #{self.dispute.id}"

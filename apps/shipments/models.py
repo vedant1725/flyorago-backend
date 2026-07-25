@@ -67,12 +67,20 @@ class ShipmentLog(models.Model):
         return f"[{self.timestamp.strftime('%Y-%m-%d %H:%M')}] {self.status} - {self.description}"
 
 class ShipmentImage(models.Model):
+    IMAGE_TYPE_CHOICES = (
+        ('pickup', 'Pickup'),
+        ('package', 'Package'),
+        ('proof', 'Proof'),
+        ('damage', 'Damage'),
+    )
+
     shipment = models.ForeignKey(Shipment, on_delete=models.CASCADE, related_name='images')
     image_url = models.TextField()
+    image_type = models.CharField(max_length=20, choices=IMAGE_TYPE_CHOICES, default='package')
     is_verification_image = models.BooleanField(default=False)
     gps_location = models.CharField(max_length=255, null=True, blank=True)
     condition_notes = models.TextField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Image for {self.shipment.tracking_number} (Verification: {self.is_verification_image})"
+        return f"{self.get_image_type_display()} Image for {self.shipment.tracking_number}"

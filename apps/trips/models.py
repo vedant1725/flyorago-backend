@@ -35,6 +35,8 @@ class Trip(models.Model):
     price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=10.00)
     accepted_parcel_types = models.JSONField(default=list)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
+    notes = models.TextField(null=True, blank=True)
+    transport_type = models.CharField(max_length=50, default='Flight')
     
     created_at = models.DateTimeField(auto_now_add=True)
 

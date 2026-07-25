@@ -1,7 +1,12 @@
+import uuid
 from django.db.models import Q
+from django.db import transaction
 from trips.models import Trip
 from bookings.models import Booking
 from shipments.models import Shipment
+from wallet.models import Wallet, Transaction
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 class MatchingService:
     @staticmethod
@@ -13,15 +18,11 @@ class MatchingService:
 
         booking = shipment.booking
 
-        if booking.status != 'Waiting Traveller':
+        if booking.status not in ['Waiting Traveller', 'REQUEST_CREATED']:
             return Trip.objects.none()
 
         # Origin and Destination (Basic icontains match for flexibility)
         origin_query = Q(from_location__icontains=shipment.pickup_address) | Q(from_airport__icontains=shipment.pickup_address)
-        
-        # If pickup_address is long like "New York, NY", we can also do:
-        # For simplicity, we assume locations are stored consistently. 
-        # But to make it more robust, we check if trip's from_location is in shipment's pickup_address
         
         # Filter Trips
         trips = Trip.objects.filter(
@@ -32,8 +33,6 @@ class MatchingService:
             user=booking.sender  # Never match with self
         )
         
-        # We perform python-level filtering for icontains to handle cases where 
-        # trip.from_location is a substring of shipment.pickup_address and vice versa
         compatible_trips = []
         for trip in trips:
             # Check Origin
@@ -51,8 +50,6 @@ class MatchingService:
             )
             
             # Check Parcel Type
-            # If trip has specific accepted_parcel_types, shipment category must be in it.
-            # If empty, accept all.
             type_match = True
             if trip.accepted_parcel_types:
                 if shipment.category.lower() not in [t.lower() for t in trip.accepted_parcel_types]:
@@ -74,7 +71,7 @@ class MatchingService:
             return Shipment.objects.none()
 
         bookings = Booking.objects.filter(
-            status='Waiting Traveller',
+            status__in=['Waiting Traveller', 'REQUEST_CREATED'],
             weight__lte=trip.available_weight
         ).exclude(
             sender=trip.user  # Never match with self
@@ -110,3 +107,159 @@ class MatchingService:
                 compatible_shipment_ids.append(shipment.id)
                 
         return Shipment.objects.filter(id__in=compatible_shipment_ids).select_related('booking', 'booking__sender')
+
+class BookingWorkflowService:
+    @staticmethod
+    def trigger_websocket_notification(booking, event_type, message):
+        def send_notification():
+            try:
+                channel_layer = get_channel_layer()
+                if not channel_layer:
+                    return
+                    
+                # Notify sender
+                sender_group = f"user_{booking.sender.id}_notifications"
+                async_to_sync(channel_layer.group_send)(
+                    sender_group,
+                    {
+                        'type': 'booking_status_update',
+                        'event_type': event_type,
+                        'message': message,
+                        'booking_id': booking.id,
+                        'status': booking.status
+                    }
+                )
+                
+                # Notify traveler if assigned
+                if booking.traveler:
+                    traveler_group = f"user_{booking.traveler.id}_notifications"
+                    async_to_sync(channel_layer.group_send)(
+                        traveler_group,
+                        {
+                            'type': 'booking_status_update',
+                            'event_type': event_type,
+                            'message': message,
+                            'booking_id': booking.id,
+                            'status': booking.status
+                        }
+                    )
+            except Exception as e:
+                print(f"Websocket notification failed: {e}")
+                
+        transaction.on_commit(send_notification)
+
+    @staticmethod
+    def send_request(booking):
+        if booking.status not in ['MATCH_FOUND', 'REQUEST_CREATED', 'Waiting Traveller', 'Draft']:
+            raise ValueError(f"Cannot send request from status {booking.status}")
+        
+        booking.status = 'REQUEST_SENT'
+        booking.save()
+        BookingWorkflowService.trigger_websocket_notification(
+            booking, 'request_sent', f"Booking #{booking.id} request has been sent to traveler."
+        )
+        return booking
+
+    @staticmethod
+    def accept_request(booking):
+        if booking.status != 'REQUEST_SENT':
+            raise ValueError(f"Cannot accept request from status {booking.status}")
+            
+        booking.status = 'ACCEPTED'
+        booking.save()
+        BookingWorkflowService.trigger_websocket_notification(
+            booking, 'accepted', f"Traveler has accepted Booking #{booking.id}."
+        )
+        return booking
+
+    @staticmethod
+    def process_payment(booking):
+        if booking.status != 'ACCEPTED':
+            raise ValueError(f"Cannot process payment from status {booking.status}")
+            
+        booking.status = 'PAID'
+        booking.payment_status = 'Escrow Hold'
+        booking.escrow_status = 'Active Hold'
+        booking.save()
+        
+        BookingWorkflowService.trigger_websocket_notification(
+            booking, 'paid', f"Payment received for Booking #{booking.id}. Funds in escrow."
+        )
+        return booking
+
+    @staticmethod
+    def upload_verification(booking):
+        if booking.status != 'PAID':
+            raise ValueError(f"Cannot verify parcel from status {booking.status}")
+            
+        booking.status = 'PARCEL_VERIFIED'
+        booking.save()
+        BookingWorkflowService.trigger_websocket_notification(
+            booking, 'parcel_verified', f"Parcel for Booking #{booking.id} is verified."
+        )
+        return booking
+
+    @staticmethod
+    def update_transit_status(booking, new_status):
+        valid_statuses = ['IN_TRANSIT', 'ARRIVED', 'OUT_FOR_DELIVERY']
+        if new_status not in valid_statuses:
+            raise ValueError(f"Invalid transit status: {new_status}")
+            
+        booking.status = new_status
+        booking.save()
+        
+        message_map = {
+            'IN_TRANSIT': 'Your parcel is now in transit.',
+            'ARRIVED': 'Your parcel has arrived at the destination city.',
+            'OUT_FOR_DELIVERY': 'Your parcel is out for delivery. OTP generated.'
+        }
+        
+        BookingWorkflowService.trigger_websocket_notification(
+            booking, new_status.lower(), message_map[new_status]
+        )
+        return booking
+
+    @staticmethod
+    def complete_delivery(booking, otp):
+        if booking.status != 'OUT_FOR_DELIVERY':
+            raise ValueError(f"Cannot complete delivery from status {booking.status}")
+            
+        if booking.delivery_otp != otp:
+            raise ValueError("Invalid OTP")
+            
+        booking.status = 'DELIVERED'
+        booking.save()
+        BookingWorkflowService.trigger_websocket_notification(
+            booking, 'delivered', f"Booking #{booking.id} has been delivered successfully!"
+        )
+        return booking
+
+    @staticmethod
+    def release_escrow(booking):
+        if booking.status != 'DELIVERED':
+            raise ValueError(f"Cannot release payment for non-delivered booking")
+            
+        if booking.escrow_status != 'Active Hold':
+            raise ValueError("No active escrow hold")
+            
+        wallet, _ = Wallet.objects.get_or_create(user=booking.traveler)
+        wallet.balance_available += booking.reward
+        wallet.save()
+        
+        Transaction.objects.create(
+            wallet=wallet,
+            amount=booking.reward,
+            type='Escrow Release',
+            status='Completed',
+            description=f"Payment release for Booking #{booking.id}"
+        )
+        
+        booking.status = 'PAYMENT_RELEASED'
+        booking.payment_status = 'Released'
+        booking.escrow_status = 'Released'
+        booking.save()
+        
+        BookingWorkflowService.trigger_websocket_notification(
+            booking, 'payment_released', f"Payment released to traveler for Booking #{booking.id}."
+        )
+        return booking

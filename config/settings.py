@@ -374,3 +374,8 @@ LOGGING = {
         },
     },
 }
+
+# Max payload size for Base64 image uploads (50MB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+

@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from users.serializers import UserSerializer
 from .models import (
-    LuggageListing, LuggageBooking, LuggageVerificationLog,
-    LuggageWeightLog, LuggageRating, LuggageDispute
+    LuggageListing, LuggageBooking, LuggageVerification,
+    LuggageQRLog, LuggageOTPLog, LuggageTracking,
+    LuggageReview, LuggageDispute
 )
 
 class LuggageListingSerializer(serializers.ModelSerializer):
@@ -25,38 +26,54 @@ class LuggageListingSerializer(serializers.ModelSerializer):
         currently_used = data.get('currently_used_weight', 0)
         if currently_used > max_allowance:
             raise serializers.ValidationError("Currently used weight cannot exceed maximum airline allowance.")
-        
+
         min_kg = data.get('min_kg', 1)
         max_kg = data.get('max_kg', 1)
         if min_kg > max_kg:
             raise serializers.ValidationError("Minimum KG cannot be greater than Maximum KG.")
-        
+
         return data
 
 
-class LuggageVerificationLogSerializer(serializers.ModelSerializer):
+class LuggageVerificationSerializer(serializers.ModelSerializer):
     verified_by_name = serializers.CharField(source='verified_by.get_full_name', read_only=True)
 
     class Meta:
-        model = LuggageVerificationLog
+        model = LuggageVerification
         fields = '__all__'
         read_only_fields = ['id', 'timestamp']
 
 
-class LuggageWeightLogSerializer(serializers.ModelSerializer):
-    logged_by_name = serializers.CharField(source='logged_by.get_full_name', read_only=True)
+class LuggageQRLogSerializer(serializers.ModelSerializer):
+    scanned_by_name = serializers.CharField(source='scanned_by.get_full_name', read_only=True)
 
     class Meta:
-        model = LuggageWeightLog
+        model = LuggageQRLog
         fields = '__all__'
         read_only_fields = ['id', 'timestamp']
 
 
-class LuggageRatingSerializer(serializers.ModelSerializer):
+class LuggageOTPLogSerializer(serializers.ModelSerializer):
+    entered_by_name = serializers.CharField(source='entered_by.get_full_name', read_only=True)
+
+    class Meta:
+        model = LuggageOTPLog
+        fields = '__all__'
+        read_only_fields = ['id', 'timestamp']
+
+
+class LuggageTrackingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LuggageTracking
+        fields = '__all__'
+        read_only_fields = ['id', 'timestamp']
+
+
+class LuggageReviewSerializer(serializers.ModelSerializer):
     reviewer_name = serializers.CharField(source='reviewer.get_full_name', read_only=True)
 
     class Meta:
-        model = LuggageRating
+        model = LuggageReview
         fields = '__all__'
         read_only_fields = ['id', 'reviewer', 'created_at']
 
@@ -74,9 +91,11 @@ class LuggageBookingSerializer(serializers.ModelSerializer):
     listing_details = LuggageListingSerializer(source='listing', read_only=True)
     booker_details = UserSerializer(source='booker', read_only=True)
     owner_details = UserSerializer(source='owner', read_only=True)
-    verification_logs = LuggageVerificationLogSerializer(many=True, read_only=True)
-    weight_logs = LuggageWeightLogSerializer(many=True, read_only=True)
-    ratings = LuggageRatingSerializer(many=True, read_only=True)
+    verifications = LuggageVerificationSerializer(many=True, read_only=True)
+    qr_logs = LuggageQRLogSerializer(many=True, read_only=True)
+    otp_logs = LuggageOTPLogSerializer(many=True, read_only=True)
+    tracking_logs = LuggageTrackingSerializer(many=True, read_only=True)
+    reviews = LuggageReviewSerializer(many=True, read_only=True)
     disputes = LuggageDisputeSerializer(many=True, read_only=True)
 
     class Meta:
@@ -85,11 +104,11 @@ class LuggageBookingSerializer(serializers.ModelSerializer):
             'id', 'listing', 'listing_details', 'booker', 'booker_details',
             'owner', 'owner_details', 'booked_weight', 'price_per_kg',
             'total_price', 'insurance_fee', 'status', 'escrow_status',
-            'qr_code_token', 'meeting_time', 'meeting_point', 'terminal',
-            'gate', 'notes', 'verification_logs', 'weight_logs',
-            'ratings', 'disputes', 'created_at', 'updated_at'
+            'qr_code_token', 'otp_code', 'meeting_time', 'meeting_point', 'terminal',
+            'gate', 'notes', 'verifications', 'qr_logs', 'otp_logs',
+            'tracking_logs', 'reviews', 'disputes', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'booker', 'owner', 'price_per_kg', 'total_price',
-            'status', 'escrow_status', 'qr_code_token', 'created_at', 'updated_at'
+            'status', 'escrow_status', 'qr_code_token', 'otp_code', 'created_at', 'updated_at'
         ]

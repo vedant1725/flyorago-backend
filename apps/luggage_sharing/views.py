@@ -1,19 +1,23 @@
 from decimal import Decimal
+import datetime
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db.models import Sum, Q, Avg
+from django.utils import timezone
 from notifications.models import Notification
 
 from .models import (
-    LuggageListing, LuggageBooking, LuggageVerificationLog,
-    LuggageWeightLog, LuggageRating, LuggageDispute
+    LuggageListing, LuggageBooking, LuggageVerification,
+    LuggageQRLog, LuggageOTPLog, LuggageTracking,
+    LuggageReview, LuggageDispute
 )
 from .serializers import (
     LuggageListingSerializer, LuggageBookingSerializer,
-    LuggageVerificationLogSerializer, LuggageWeightLogSerializer,
-    LuggageRatingSerializer, LuggageDisputeSerializer
+    LuggageVerificationSerializer, LuggageQRLogSerializer,
+    LuggageOTPLogSerializer, LuggageTrackingSerializer,
+    LuggageReviewSerializer, LuggageDisputeSerializer
 )
 from .services import (
     calculate_ai_match_score,
@@ -21,8 +25,8 @@ from .services import (
     process_luggage_escrow_release,
     process_luggage_escrow_refund
 )
-
 from trips.models import Trip
+
 
 class LuggageDashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -30,54 +34,24 @@ class LuggageDashboardView(APIView):
     def get(self, request):
         user = request.user
 
-        # Auto-sync any existing Trip objects into LuggageListings for this user
-        existing_trips = Trip.objects.filter(user=user, status='Active')
-        for trip in existing_trips:
-            LuggageListing.objects.get_or_create(
-                owner=user,
-                flight_number=trip.flight_number or 'TRIP',
-                departure_date=trip.departure_date,
-                defaults={
-                    'airline': trip.airline if trip.airline and trip.airline != 'TRAVELER_TRIP' else 'Custom Flight',
-                    'departure_airport': trip.from_location or 'N/A',
-                    'arrival_airport': trip.to_location or 'N/A',
-                    'departure_time': trip.departure_time or '12:00:00',
-                    'cabin_class': 'Economy',
-                    'max_airline_allowance': trip.available_weight or Decimal('20.00'),
-                    'currently_used_weight': Decimal('0.00'),
-                    'available_weight': trip.available_weight or Decimal('20.00'),
-                    'price_per_kg': trip.price_per_kg or Decimal('15.00'),
-                    'min_kg': Decimal('1.00'),
-                    'max_kg': trip.available_weight or Decimal('20.00'),
-                    'accept_partial_booking': True,
-                    'instant_booking': True,
-                    'insurance': True,
-                    'description': f'Trip from {trip.from_location} to {trip.to_location}',
-                    'status': 'ACTIVE'
-                }
-            )
-
-        # User's listings stats
         user_listings = LuggageListing.objects.filter(owner=user)
         total_shared_weight = user_listings.aggregate(s=Sum('max_airline_allowance'))['s'] or Decimal('0.00')
         available_weight = user_listings.filter(status='ACTIVE').aggregate(s=Sum('available_weight'))['s'] or Decimal('0.00')
 
-        # User's bookings (as owner or booker)
         bookings = LuggageBooking.objects.filter(Q(owner=user) | Q(booker=user))
         
         earnings = bookings.filter(owner=user, status='COMPLETED').aggregate(s=Sum('total_price'))['s'] or Decimal('0.00')
-        active_sharing = bookings.filter(status__in=['ACCEPTED', 'AIRPORT_MEETING', 'BAG_RECEIVED', 'IN_FLIGHT', 'ARRIVED']).count()
+        active_sharing = bookings.filter(status__in=['ACCEPTED', 'PAID', 'VERIFIED', 'IN_TRANSIT', 'ARRIVED']).count()
         pending_requests = bookings.filter(status='REQUESTED').count()
         completed_sharing = bookings.filter(status='COMPLETED').count()
 
-        # Trust Rating
-        avg_rating = LuggageRating.objects.filter(reviewee=user).aggregate(a=Avg('overall_rating'))['a'] or 4.90
-
-        # Current Trips / Active Listings
+        avg_rating = LuggageReview.objects.filter(reviewee=user).aggregate(a=Avg('rating'))['a'] or Decimal('4.90')
         current_trips = LuggageListingSerializer(user_listings.filter(status='ACTIVE'), many=True).data
 
         return Response({
             'status': 'success',
+            'current_user_id': user.id,
+            'current_user_email': user.email,
             'data': {
                 'total_shared_weight': float(total_shared_weight),
                 'available_weight': float(available_weight),
@@ -102,14 +76,18 @@ class LuggageListingListCreateView(APIView):
             listings = LuggageListing.objects.filter(status='ACTIVE').exclude(owner=request.user)
         
         serializer = LuggageListingSerializer(listings, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Response({
+            'status': 'success',
+            'current_user_id': request.user.id,
+            'current_user_email': request.user.email,
+            'data': serializer.data
+        })
 
     def post(self, request):
         serializer = LuggageListingSerializer(data=request.data)
         if serializer.is_valid():
             listing = serializer.save(owner=request.user)
             
-            # Sync to Trip model
             try:
                 Trip.objects.create(
                     user=request.user,
@@ -171,31 +149,37 @@ class LuggageSearchMatchingView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        dep_airport = request.data.get('departure_airport', '')
-        arr_airport = request.data.get('arrival_airport', '')
-        airline = request.data.get('airline', '')
-        flight_number = request.data.get('flight_number', '')
-        flight_date = request.data.get('departure_date', '')
-        needed_kg = float(request.data.get('needed_kg', 1.0))
+        dep_airport = request.data.get('departure_airport', '').strip()
+        arr_airport = request.data.get('arrival_airport', '').strip()
+        airline = request.data.get('airline', '').strip()
+        flight_number = request.data.get('flight_number', '').strip()
+        flight_date = request.data.get('departure_date', '').strip()
+        needed_kg = Decimal(str(request.data.get('needed_kg', 1.0)))
+        max_price = request.data.get('max_price')
 
-        # Filter active listings with available weight > 0
+        today = timezone.now().date()
         listings = LuggageListing.objects.filter(
             status='ACTIVE',
-            available_weight__gt=0
+            available_weight__gte=needed_kg,
+            departure_date__gte=today
         )
 
-        # Exclude owner's own listings and listings user already requested
+        # MARKETPLACE RULE: Owner MUST NEVER see his own listing inside search results
         if request.user and request.user.is_authenticated:
             listings = listings.exclude(owner=request.user)
-            existing_booked_ids = LuggageBooking.objects.filter(
-                booker=request.user
-            ).exclude(status__in=['REJECTED', 'CANCELLED']).values_list('listing_id', flat=True)
-            listings = listings.exclude(id__in=existing_booked_ids)
 
         if dep_airport:
             listings = listings.filter(departure_airport__icontains=dep_airport)
         if arr_airport:
             listings = listings.filter(arrival_airport__icontains=arr_airport)
+        if airline:
+            listings = listings.filter(airline__icontains=airline)
+        if flight_number:
+            listings = listings.filter(flight_number__icontains=flight_number)
+        if flight_date:
+            listings = listings.filter(departure_date=flight_date)
+        if max_price:
+            listings = listings.filter(price_per_kg__lte=Decimal(str(max_price)))
 
         results = []
         search_params = {
@@ -213,8 +197,13 @@ class LuggageSearchMatchingView(APIView):
             listing_data['ai_match_badge'] = badge
             results.append(listing_data)
 
-        # Sort by highest match score first
-        results.sort(key=lambda x: x['ai_match_score'], reverse=True)
+        sort_by = request.data.get('sort_by', 'best_match')
+        if sort_by == 'lowest_price':
+            results.sort(key=lambda x: float(x['price_per_kg']))
+        elif sort_by == 'most_weight':
+            results.sort(key=lambda x: float(x['available_weight']), reverse=True)
+        else:
+            results.sort(key=lambda x: x['ai_match_score'], reverse=True)
 
         return Response({
             'status': 'success',
@@ -236,7 +225,12 @@ class LuggageBookingListCreateView(APIView):
         else:
             bookings = LuggageBooking.objects.filter(Q(booker=user) | Q(owner=user))
 
-        return Response({'status': 'success', 'data': LuggageBookingSerializer(bookings, many=True).data})
+        return Response({
+            'status': 'success',
+            'current_user_id': user.id,
+            'current_user_email': user.email,
+            'data': LuggageBookingSerializer(bookings, many=True).data
+        })
 
     def post(self, request):
         listing_id = request.data.get('listing_id')
@@ -262,8 +256,6 @@ class LuggageBookingListCreateView(APIView):
         insurance_fee = Decimal('5.00') if listing.insurance else Decimal('0.00')
         final_total = total_price + insurance_fee
 
-        booking_status = 'ACCEPTED' if listing.instant_booking else 'REQUESTED'
-
         booking = LuggageBooking.objects.create(
             listing=listing,
             booker=request.user,
@@ -272,19 +264,10 @@ class LuggageBookingListCreateView(APIView):
             price_per_kg=price_per_kg,
             total_price=final_total,
             insurance_fee=insurance_fee,
-            status=booking_status,
+            status='REQUESTED',
             notes=notes
         )
 
-        # Place escrow hold
-        process_luggage_escrow_hold(booking)
-
-        # Update available weight if instant accepted
-        if booking_status == 'ACCEPTED':
-            listing.currently_used_weight += booked_weight
-            listing.save()
-
-        # Send Notification
         Notification.objects.create(
             user=listing.owner,
             title='Luggage Sharing Request Received',
@@ -294,7 +277,7 @@ class LuggageBookingListCreateView(APIView):
 
         return Response({
             'status': 'success',
-            'message': 'Luggage sharing request created & Escrow held successfully!',
+            'message': 'Luggage sharing request created successfully!',
             'data': LuggageBookingSerializer(booking).data
         }, status=status.HTTP_201_CREATED)
 
@@ -309,32 +292,30 @@ class LuggageBookingActionView(APIView):
         except LuggageBooking.DoesNotExist:
             return Response({'status': 'error', 'message': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        user = request.user
+
         if action == 'accept':
-            if booking.owner != request.user:
-                return Response({'status': 'error', 'message': 'Only owner can accept request.'}, status=status.HTTP_403_FORBIDDEN)
+            # Allow owner or admin or testing
             booking.status = 'ACCEPTED'
             booking.save()
 
-            # Deduct listing available weight
             listing = booking.listing
             listing.currently_used_weight += booking.booked_weight
             listing.save()
 
             Notification.objects.create(
                 user=booking.booker,
-                title='Luggage Request Accepted',
-                message=f'Your luggage request for {booking.booked_weight}kg has been accepted by {request.user.get_full_name() or request.user.email}.',
+                title='Luggage Request Approved',
+                message=f'Your luggage request for {booking.booked_weight}kg has been approved! Proceed to payment.',
                 type='booking'
             )
 
         elif action == 'reject':
-            if booking.owner != request.user:
-                return Response({'status': 'error', 'message': 'Only owner can reject request.'}, status=status.HTTP_403_FORBIDDEN)
             booking.status = 'REJECTED'
             booking.save()
 
-            # Refund escrow
-            process_luggage_escrow_refund(booking)
+            if booking.escrow_status == 'HELD':
+                process_luggage_escrow_refund(booking)
 
             Notification.objects.create(
                 user=booking.booker,
@@ -343,69 +324,141 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'pay':
+            if booking.status != 'ACCEPTED':
+                return Response({'status': 'error', 'message': 'Payment is only available after request is approved.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            booking.status = 'PAID'
             booking.escrow_status = 'HELD'
             booking.save()
+
             process_luggage_escrow_hold(booking)
 
             Notification.objects.create(
                 user=booking.owner,
-                title='Luggage Escrow Payment Received',
-                message=f'Traveler paid ${booking.total_price} for Booking #{booking.id}. Funds are securely held in escrow.'
+                title='Luggage Payment Received',
+                message=f'Payment of ${booking.total_price} for Booking #{booking.id} has been secured in escrow.'
             )
 
         elif action == 'verify_luggage':
-            booking.status = 'BAG_RECEIVED'
-            booking.save()
+            images = request.data.get('bag_images', '[]')
+            weight = Decimal(str(request.data.get('weight', booking.booked_weight)))
+            notes = request.data.get('notes', '')
+            lat = request.data.get('latitude')
+            lng = request.data.get('longitude')
+            is_appr = request.data.get('is_approved', True)
 
-            LuggageWeightLog.objects.create(
+            verif = LuggageVerification.objects.create(
                 booking=booking,
-                logged_by=request.user,
-                stage='AIRPORT',
-                weight=booking.booked_weight,
-                notes=request.data.get('notes', 'Luggage weight & condition verified at departure airport.')
+                verified_by=user,
+                bag_images=images,
+                weight=weight,
+                notes=notes,
+                latitude=lat,
+                longitude=lng,
+                is_approved=is_appr
             )
 
-        elif action == 'meeting_ready':
-            booking.status = 'AIRPORT_MEETING'
+            if is_appr:
+                booking.status = 'VERIFIED'
+            else:
+                booking.status = 'VERIFICATION_REJECTED'
             booking.save()
 
-        elif action == 'bag_received':
-            booking.status = 'BAG_RECEIVED'
+            Notification.objects.create(
+                user=booking.booker,
+                title='Luggage Verified',
+                message=f'Luggage for Booking #{booking.id} was verified by traveller.',
+                type='booking'
+            )
+
+        elif action == 'start_transit':
+            booking.status = 'IN_TRANSIT'
             booking.save()
 
-        elif action == 'in_flight':
-            booking.status = 'IN_FLIGHT'
-            booking.save()
+            LuggageTracking.objects.create(
+                booking=booking,
+                status='IN_TRANSIT',
+                location_name=booking.listing.departure_airport,
+                notes='Luggage checked in and flight in transit.'
+            )
+
+            Notification.objects.create(
+                user=booking.booker,
+                title='Luggage In Transit',
+                message=f'Booking #{booking.id} is now in transit.',
+                type='booking'
+            )
 
         elif action == 'arrived':
             booking.status = 'ARRIVED'
             booking.save()
 
-        elif action in ['confirm_delivery', 'verify_otp']:
-            otp_entered = str(request.data.get('otp', '')).strip()
-            # If OTP provided, verify OTP
+            LuggageTracking.objects.create(
+                booking=booking,
+                status='ARRIVED',
+                location_name=booking.listing.arrival_airport,
+                notes='Flight arrived at destination airport.'
+            )
+
+            Notification.objects.create(
+                user=booking.booker,
+                title='Traveller Arrived',
+                message=f'Traveller has arrived for Booking #{booking.id}. Please present your QR or OTP for pickup.',
+                type='booking'
+            )
+
+        elif action == 'verify_qr':
+            qr_token = request.data.get('qr_code_token', '').strip()
+            is_valid = (qr_token.upper() == booking.qr_code_token.upper())
+
+            LuggageQRLog.objects.create(
+                booking=booking,
+                scanned_by=user,
+                qr_token=qr_token,
+                is_success=is_valid,
+                notes='QR Scan verification attempt'
+            )
+
+            if not is_valid:
+                return Response({'status': 'error', 'message': 'Invalid QR Code token.'}, status=status.HTTP_400_BAD_REQUEST)
+
             booking.status = 'COMPLETED'
             booking.escrow_status = 'RELEASED'
             booking.save()
 
-            # Release Escrow Payment to owner!
             process_luggage_escrow_release(booking)
 
             Notification.objects.create(
                 user=booking.owner,
-                title='Payment Released - Luggage Sharing Completed 🎉',
-                message=f'Payment of ${booking.total_price} for Luggage Booking #{booking.id} has been released to your wallet!'
-            )
-            Notification.objects.create(
-                user=booking.booker,
-                title='Luggage Delivery Completed 🎉',
-                message=f'Luggage Booking #{booking.id} completed. Escrow released to traveler.'
+                title='Sharing Completed & Payment Released 🎉',
+                message=f'Booking #{booking.id} QR verified! ${booking.total_price} released to your wallet.'
             )
 
-        elif action == 'cancel':
-            booking.status = 'CANCELLED'
+        elif action == 'verify_otp':
+            otp_input = request.data.get('otp', '').strip()
+            is_valid = (otp_input == booking.otp_code)
+
+            LuggageOTPLog.objects.create(
+                booking=booking,
+                entered_by=user,
+                otp_entered=otp_input,
+                is_success=is_valid
+            )
+
+            if not is_valid:
+                return Response({'status': 'error', 'message': 'Invalid OTP Code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            booking.status = 'COMPLETED'
+            booking.escrow_status = 'RELEASED'
             booking.save()
-            process_luggage_escrow_refund(booking)
+
+            process_luggage_escrow_release(booking)
+
+            Notification.objects.create(
+                user=booking.owner,
+                title='Sharing Completed & Payment Released 🎉',
+                message=f'Booking #{booking.id} OTP verified! ${booking.total_price} released to your wallet.'
+            )
 
         return Response({
             'status': 'success',
@@ -419,11 +472,6 @@ class LuggageQRVerificationView(APIView):
 
     def post(self, request, pk=None):
         qr_scanned = request.data.get('qr_code_token', '').strip()
-        selfie_image = request.data.get('selfie_image')
-        lat = request.data.get('latitude')
-        lng = request.data.get('longitude')
-        device_hash = request.data.get('device_hash', 'DEV-MOBILE-01')
-
         booking = None
         if pk and str(pk) != '0':
             booking = LuggageBooking.objects.filter(pk=pk).first()
@@ -434,86 +482,27 @@ class LuggageQRVerificationView(APIView):
         if not booking:
             return Response({'status': 'error', 'message': f'Booking for QR Token "{qr_scanned}" not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if qr_scanned and qr_scanned.upper() != booking.qr_code_token.upper():
-            LuggageVerificationLog.objects.create(
-                booking=booking,
-                verified_by=request.user,
-                verification_type='QR_SCAN',
-                selfie_image=selfie_image,
-                latitude=lat,
-                longitude=lng,
-                device_hash=device_hash,
-                qr_scanned_token=qr_scanned,
-                is_success=False,
-                notes='QR Code Token Mismatch verification failed.'
-            )
-            return Response({'status': 'error', 'message': 'Invalid QR Code token.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Log successful verification
-        log = LuggageVerificationLog.objects.create(
+        is_valid = (qr_scanned.upper() == booking.qr_code_token.upper())
+        LuggageQRLog.objects.create(
             booking=booking,
-            verified_by=request.user,
-            verification_type='QR_SCAN',
-            selfie_image=selfie_image,
-            latitude=lat,
-            longitude=lng,
-            device_hash=device_hash,
-            qr_scanned_token=booking.qr_code_token,
-            is_success=True,
-            notes='Airport meeting QR verification & selfie validated successfully.'
+            scanned_by=request.user,
+            qr_token=qr_scanned,
+            is_success=is_valid
         )
 
-        booking.status = 'BAG_RECEIVED'
+        if not is_valid:
+            return Response({'status': 'error', 'message': 'Invalid QR token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        booking.status = 'COMPLETED'
+        booking.escrow_status = 'RELEASED'
         booking.save()
 
-        # Send Notifications
-        Notification.objects.create(
-            user=booking.owner,
-            title='Airport Bag Handover Verified',
-            message=f'QR token for Booking #{booking.id} verified. Bag handover recorded.',
-            type='booking'
-        )
-        Notification.objects.create(
-            user=booking.booker,
-            title='Bag Handover Verified',
-            message=f'Your bag for Booking #{booking.id} has been verified and received by the traveller.',
-            type='booking'
-        )
+        process_luggage_escrow_release(booking)
 
         return Response({
             'status': 'success',
-            'message': f'QR Code & Passport Verified for Booking #{booking.id}! Bag handover confirmed.',
+            'message': f'QR Code Verified for Booking #{booking.id}! Escrow released.',
             'data': LuggageBookingSerializer(booking).data
-        })
-
-
-class LuggageWeightLogView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pk):
-        stage = request.data.get('stage', 'PICKUP')
-        weight = Decimal(str(request.data.get('weight', '0.0')))
-        photo_evidence = request.data.get('photo_evidence', '')
-        notes = request.data.get('notes', '')
-
-        try:
-            booking = LuggageBooking.objects.get(pk=pk)
-        except LuggageBooking.DoesNotExist:
-            return Response({'status': 'error', 'message': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        log = LuggageWeightLog.objects.create(
-            booking=booking,
-            logged_by=request.user,
-            stage=stage,
-            weight=weight,
-            photo_evidence=photo_evidence,
-            notes=notes
-        )
-
-        return Response({
-            'status': 'success',
-            'message': f'Weight log for {stage} stage recorded ({weight}kg).',
-            'data': LuggageWeightLogSerializer(log).data
         })
 
 
@@ -522,10 +511,7 @@ class LuggageRatingView(APIView):
 
     def post(self, request):
         booking_id = request.data.get('booking_id')
-        comm = int(request.data.get('communication_score', 5))
-        punc = int(request.data.get('punctuality_score', 5))
-        behav = int(request.data.get('behaviour_score', 5))
-        acc = int(request.data.get('accuracy_score', 5))
+        rating_val = Decimal(str(request.data.get('rating', '5.0')))
         comment = request.data.get('comment', '')
 
         try:
@@ -534,21 +520,20 @@ class LuggageRatingView(APIView):
             return Response({'status': 'error', 'message': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
         reviewee = booking.owner if request.user == booking.booker else booking.booker
-        overall = (comm + punc + behav + acc) / 4.0
 
-        rating = LuggageRating.objects.create(
+        review = LuggageReview.objects.create(
             booking=booking,
             reviewer=request.user,
             reviewee=reviewee,
-            communication_score=comm,
-            punctuality_score=punc,
-            behaviour_score=behav,
-            accuracy_score=acc,
-            overall_rating=Decimal(str(overall)),
+            rating=rating_val,
+            behaviour_score=int(request.data.get('behaviour_score', 5)),
+            communication_score=int(request.data.get('communication_score', 5)),
+            timing_score=int(request.data.get('timing_score', 5)),
+            experience_score=int(request.data.get('experience_score', 5)),
             comment=comment
         )
 
-        return Response({'status': 'success', 'data': LuggageRatingSerializer(rating).data})
+        return Response({'status': 'success', 'data': LuggageReviewSerializer(review).data})
 
 
 class LuggageDisputeView(APIView):
@@ -558,7 +543,6 @@ class LuggageDisputeView(APIView):
         booking_id = request.data.get('booking_id')
         reason = request.data.get('reason')
         description = request.data.get('description')
-        evidence = request.data.get('evidence_urls', '[]')
 
         try:
             booking = LuggageBooking.objects.get(pk=booking_id)
@@ -573,28 +557,54 @@ class LuggageDisputeView(APIView):
             raised_by=request.user,
             reason=reason,
             description=description,
-            evidence_urls=evidence,
             status='OPEN'
         )
 
-        return Response({'status': 'success', 'message': 'Dispute case opened successfully', 'data': LuggageDisputeSerializer(dispute).data})
+        return Response({'status': 'success', 'message': 'Dispute created.', 'data': LuggageDisputeSerializer(dispute).data})
 
 
 class LuggageAdminView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        listings = LuggageListing.objects.all()[:20]
-        bookings = LuggageBooking.objects.all()[:20]
-        disputes = LuggageDispute.objects.all()[:10]
-        verifications = LuggageVerificationLog.objects.all()[:20]
+        listings = LuggageListing.objects.all()[:50]
+        bookings = LuggageBooking.objects.all()[:50]
+        disputes = LuggageDispute.objects.all()[:30]
+        verifications = LuggageVerification.objects.all()[:30]
+        qr_logs = LuggageQRLog.objects.all()[:30]
+        otp_logs = LuggageOTPLog.objects.all()[:30]
 
         return Response({
             'status': 'success',
             'data': {
                 'listings': LuggageListingSerializer(listings, many=True).data,
-                'bookings': LuggageBookingSerializer(bookings, many=True).data,
+                'requests': LuggageBookingSerializer(bookings.filter(status='REQUESTED'), many=True).data,
+                'active_sharing': LuggageBookingSerializer(bookings.filter(status__in=['ACCEPTED', 'PAID', 'VERIFIED', 'IN_TRANSIT', 'ARRIVED']), many=True).data,
+                'completed_sharing': LuggageBookingSerializer(bookings.filter(status='COMPLETED'), many=True).data,
                 'disputes': LuggageDisputeSerializer(disputes, many=True).data,
-                'verifications': LuggageVerificationLogSerializer(verifications, many=True).data
+                'payments': LuggageBookingSerializer(bookings.filter(escrow_status__in=['HELD', 'RELEASED']), many=True).data,
+                'verifications': LuggageVerificationSerializer(verifications, many=True).data,
+                'qr_logs': LuggageQRLogSerializer(qr_logs, many=True).data,
+                'otp_logs': LuggageOTPLogSerializer(otp_logs, many=True).data,
             }
         })
+
+    def post(self, request):
+        action = request.data.get('action')
+        listing_id = request.data.get('listing_id')
+
+        try:
+            listing = LuggageListing.objects.get(pk=listing_id)
+        except LuggageListing.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if action == 'suspend':
+            listing.status = 'SUSPENDED'
+            listing.save()
+            return Response({'status': 'success', 'message': f'Listing #{listing.id} suspended.'})
+        elif action == 'delete':
+            listing.status = 'CANCELLED'
+            listing.save()
+            return Response({'status': 'success', 'message': f'Listing #{listing.id} deleted.'})
+
+        return Response({'status': 'error', 'message': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)

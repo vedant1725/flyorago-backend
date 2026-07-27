@@ -90,7 +90,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'id': str(obj.sender.id),
             'name': f"{obj.sender.first_name} {obj.sender.last_name}".strip() or obj.sender.email.split('@')[0],
             'email': obj.sender.email,
-            'phone': getattr(obj.sender, 'phone_number', '') or (profile.phone_number if profile else ''),
+            'phone': getattr(obj.sender, 'phone_number', '') or '',
             'kyc_status': kyc_status,
             'is_kyc_verified': kyc_status == 'APPROVED',
             'city': 'Sender'

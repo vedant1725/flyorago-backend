@@ -1,4 +1,5 @@
 import uuid
+import random
 from django.db import models
 from django.conf import settings
 
@@ -59,7 +60,7 @@ class LuggageListing(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        # Enforce validation: Available Weight can never exceed airline allowance minus used weight
+        # Validation: Available Weight can never exceed airline allowance minus used weight
         calculated = self.max_airline_allowance - self.currently_used_weight
         if calculated < 0:
             calculated = 0
@@ -74,9 +75,10 @@ class LuggageBooking(models.Model):
     STATUS_CHOICES = (
         ('REQUESTED', 'REQUESTED'),
         ('ACCEPTED', 'ACCEPTED'),
-        ('AIRPORT_MEETING', 'AIRPORT_MEETING'),
-        ('BAG_RECEIVED', 'BAG_RECEIVED'),
-        ('IN_FLIGHT', 'IN_FLIGHT'),
+        ('PAID', 'PAID'),
+        ('VERIFIED', 'VERIFIED'),
+        ('VERIFICATION_REJECTED', 'VERIFICATION_REJECTED'),
+        ('IN_TRANSIT', 'IN_TRANSIT'),
         ('ARRIVED', 'ARRIVED'),
         ('COMPLETED', 'COMPLETED'),
         ('REJECTED', 'REJECTED'),
@@ -116,6 +118,8 @@ class LuggageBooking(models.Model):
     escrow_status = models.CharField(max_length=20, choices=ESCROW_STATUS_CHOICES, default='PENDING')
 
     qr_code_token = models.CharField(max_length=100, unique=True, blank=True, null=True)
+    otp_code = models.CharField(max_length=6, blank=True, null=True)
+
     meeting_time = models.DateTimeField(null=True, blank=True)
     meeting_point = models.CharField(max_length=255, null=True, blank=True, default='Departure Terminal Main Information Desk')
     terminal = models.CharField(max_length=50, null=True, blank=True, default='T1')
@@ -139,76 +143,86 @@ class LuggageBooking(models.Model):
     def save(self, *args, **kwargs):
         if not self.qr_code_token:
             self.qr_code_token = f"LUG-{uuid.uuid4().hex[:12].upper()}"
+        if not self.otp_code:
+            self.otp_code = str(random.randint(100000, 999999))
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"LuggageBooking #{self.id} - {self.booked_weight}kg ({self.status})"
 
 
-class LuggageVerificationLog(models.Model):
-    VERIFICATION_TYPE_CHOICES = (
-        ('QR_SCAN', 'QR_SCAN'),
-        ('FACE_SELFIE', 'FACE_SELFIE'),
-        ('GPS_VALIDATION', 'GPS_VALIDATION'),
-        ('PASSPORT_CHECK', 'PASSPORT_CHECK'),
-        ('AIRLINE_CHECK', 'AIRLINE_CHECK'),
-    )
-
-    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='verification_logs')
+class LuggageVerification(models.Model):
+    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='verifications')
     verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    verification_type = models.CharField(max_length=30, choices=VERIFICATION_TYPE_CHOICES)
-    
-    selfie_image = models.TextField(blank=True, null=True)
+    bag_images = models.TextField(blank=True, default='[]', help_text='JSON array of uploaded image URLs')
+    weight = models.DecimalField(max_digits=6, decimal_places=2, default=0.00)
+    notes = models.TextField(blank=True, default='')
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
-    device_hash = models.CharField(max_length=100, blank=True, null=True)
-    qr_scanned_token = models.CharField(max_length=100, blank=True, null=True)
-    
+    is_approved = models.BooleanField(default=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'luggage_verifications'
+        ordering = ['-timestamp']
+
+
+class LuggageQRLog(models.Model):
+    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='qr_logs')
+    scanned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    qr_token = models.CharField(max_length=100)
     is_success = models.BooleanField(default=True)
+    device_info = models.CharField(max_length=255, blank=True, null=True)
     notes = models.TextField(blank=True, default='')
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'luggage_verification_logs'
+        db_table = 'luggage_qr_logs'
         ordering = ['-timestamp']
 
 
-class LuggageWeightLog(models.Model):
-    STAGE_CHOICES = (
-        ('PICKUP', 'PICKUP'),
-        ('AIRPORT', 'AIRPORT'),
-        ('DESTINATION', 'DESTINATION'),
-    )
+class LuggageOTPLog(models.Model):
+    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='otp_logs')
+    entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    otp_entered = models.CharField(max_length=6)
+    is_success = models.BooleanField(default=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
 
-    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='weight_logs')
-    logged_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    stage = models.CharField(max_length=20, choices=STAGE_CHOICES)
-    weight = models.DecimalField(max_digits=6, decimal_places=2)
-    photo_evidence = models.TextField(blank=True, null=True)
+    class Meta:
+        db_table = 'luggage_otp_logs'
+        ordering = ['-timestamp']
+
+
+class LuggageTracking(models.Model):
+    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='tracking_logs')
+    status = models.CharField(max_length=50)
+    location_name = models.CharField(max_length=255, blank=True, default='')
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
     notes = models.TextField(blank=True, default='')
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'luggage_weight_logs'
+        db_table = 'luggage_tracking'
         ordering = ['-timestamp']
 
 
-class LuggageRating(models.Model):
-    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='ratings')
-    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='luggage_reviews_given')
-    reviewee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='luggage_reviews_received')
+class LuggageReview(models.Model):
+    booking = models.ForeignKey(LuggageBooking, on_delete=models.CASCADE, related_name='reviews')
+    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='luggage_reviews_sent')
+    reviewee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='luggage_reviews_got')
 
-    communication_score = models.IntegerField(default=5)
-    punctuality_score = models.IntegerField(default=5)
+    rating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00)
     behaviour_score = models.IntegerField(default=5)
-    accuracy_score = models.IntegerField(default=5)
-    overall_rating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00)
+    communication_score = models.IntegerField(default=5)
+    timing_score = models.IntegerField(default=5)
+    experience_score = models.IntegerField(default=5)
 
     comment = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'luggage_ratings'
+        db_table = 'luggage_reviews'
         ordering = ['-created_at']
 
 
@@ -226,7 +240,7 @@ class LuggageDispute(models.Model):
     reason = models.CharField(max_length=150)
     description = models.TextField()
     evidence_urls = models.TextField(blank=True, default='[]')
-    
+
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='OPEN')
     resolution_notes = models.TextField(blank=True, default='')
 

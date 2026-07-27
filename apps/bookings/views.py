@@ -114,6 +114,13 @@ class BookingActionView(views.APIView):
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can accept")
                 booking = BookingWorkflowService.accept_request(booking)
+                from notifications.models import Notification
+                Notification.objects.create(
+                    user=booking.sender,
+                    title='Parcel Request Accepted 🎉',
+                    message=f'Traveler accepted your request for parcel "{booking.package_name}". Proceed to payment!',
+                    type='booking'
+                )
                 return success_response(data=BookingSerializer(booking).data, message="Booking accepted")
 
             elif action == 'REJECT':
@@ -121,6 +128,16 @@ class BookingActionView(views.APIView):
                     return failure_response(message="Only traveler can reject")
                 booking.status = 'REJECTED'
                 booking.save()
+                if booking.trip and booking.weight:
+                    booking.trip.available_weight += booking.weight
+                    booking.trip.save()
+                from notifications.models import Notification
+                Notification.objects.create(
+                    user=booking.sender,
+                    title='Parcel Request Rejected ❌',
+                    message=f'Traveler declined your request for parcel "{booking.package_name}".',
+                    type='booking'
+                )
                 BookingWorkflowService.trigger_websocket_notification(
                     booking, 'rejected', f"Traveler rejected Booking #{booking.id}."
                 )

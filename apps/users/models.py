@@ -59,6 +59,13 @@ class User(AbstractBaseUser, PermissionsMixin):
             models.Index(fields=['role']),
         ]
 
+    def get_full_name(self):
+        name = f"{self.first_name} {self.last_name}".strip()
+        return name or self.email
+
+    def get_short_name(self):
+        return self.first_name or self.email.split('@')[0]
+
     def __str__(self):
         return f"{self.email} ({self.get_role_display()})"
 
@@ -111,4 +118,3 @@ class AdminLog(models.Model):
 
     def __str__(self):
         return f"Admin {self.admin.email} - {self.action}"
-

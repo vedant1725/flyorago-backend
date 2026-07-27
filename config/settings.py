@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'flights',
     'apps.trust_scores',
     'apps.luggage_sharing',
+    'apps.ai_assistant',
 ]
 
 MIDDLEWARE = [

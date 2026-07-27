@@ -54,6 +54,7 @@ urlpatterns = [
     path('api/support/', include('support.urls')),
     path('api/flights/', include('flights.urls')),
     path('api/trust/', include('apps.trust_scores.urls')),
+    path('api/luggage/', include('apps.luggage_sharing.urls')),
 
     # Matching Engine
     path('api/matches/find-travellers/<int:shipment_id>/', MatchTravellerListView.as_view(), name='match_travellers_root'),

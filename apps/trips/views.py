@@ -56,7 +56,35 @@ class TripListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             trip = serializer.save(user=request.user)
-            # Return serialized full object representation
+            
+            # Sync to LuggageListing model
+            try:
+                from apps.luggage_sharing.models import LuggageListing
+                from decimal import Decimal
+                LuggageListing.objects.create(
+                    owner=request.user,
+                    airline=trip.airline if trip.airline and trip.airline != 'TRAVELER_TRIP' else 'Custom Flight',
+                    flight_number=trip.flight_number or 'TRIP',
+                    departure_airport=trip.from_location or 'N/A',
+                    arrival_airport=trip.to_location or 'N/A',
+                    departure_date=trip.departure_date,
+                    departure_time=trip.departure_time or '12:00:00',
+                    cabin_class='Economy',
+                    max_airline_allowance=trip.available_weight or Decimal('20.00'),
+                    currently_used_weight=Decimal('0.00'),
+                    available_weight=trip.available_weight or Decimal('20.00'),
+                    price_per_kg=trip.price_per_kg or Decimal('15.00'),
+                    min_kg=Decimal('1.00'),
+                    max_kg=trip.available_weight or Decimal('20.00'),
+                    accept_partial_booking=True,
+                    instant_booking=True,
+                    insurance=True,
+                    description=f'Trip from {trip.from_location} to {trip.to_location}',
+                    status='ACTIVE'
+                )
+            except Exception as e:
+                print("Error syncing LuggageListing:", e)
+
             full_data = TripSerializer(trip).data
             return success_response(data=full_data, message="Trip registered successfully", status_code=status.HTTP_201_CREATED)
         return failure_response(errors=serializer.errors, message="Failed to create trip")

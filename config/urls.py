@@ -3,18 +3,16 @@ from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from profiles.views import KYCStatusView, KYCSubmitView, KYCAdminListView, KYCAdminActionView
 from config.views import api_root
-<<<<<<< HEAD
-from common.admin_views import (
-    AdminStatsView, AdminChartDataView,
-    AdminTripsListView, AdminBookingsListView, AdminShipmentsListView, AdminUsersListView,
-    AdminTripActionView, AdminBookingActionView, AdminShipmentActionView, AdminUserActionView,
-=======
 from bookings.views import MatchTravellerListView, MatchShipmentListView
+
+from common.admin_views import (
+    AdminShipmentsListView,
+    AdminTripActionView, AdminBookingActionView, AdminShipmentActionView, AdminUserActionView,
+)
 
 from config.admin_views import (
     AdminUserListView, AdminTripListView, AdminBookingListView, 
     AdminTrustListView, AdminDisputeListView, AdminStatsView, AdminChartView
->>>>>>> de409e1 (Fix Admin API 404 endpoints by creating dedicated admin_views.py and mapping them in urls.py)
 )
 
 urlpatterns = [
@@ -27,12 +25,7 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
     # ── Admin Panel: Stats & Lists & Chart ──
-    path('api/admin/stats/', AdminStatsView.as_view(), name='admin_stats'),
-    path('api/admin/chart/', AdminChartDataView.as_view(), name='admin_chart'),
-    path('api/admin/trips/', AdminTripsListView.as_view(), name='admin_trips'),
-    path('api/admin/bookings/', AdminBookingsListView.as_view(), name='admin_bookings'),
     path('api/admin/shipments/', AdminShipmentsListView.as_view(), name='admin_shipments'),
-    path('api/admin/users/', AdminUsersListView.as_view(), name='admin_users'),
 
     # ── Admin Panel: CRUD Actions ──
     path('api/admin/trips/<int:pk>/', AdminTripActionView.as_view(), name='admin_trip_action'),

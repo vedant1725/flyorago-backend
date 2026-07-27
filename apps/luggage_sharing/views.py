@@ -342,6 +342,29 @@ class LuggageBookingActionView(APIView):
                 message=f'Your luggage request for booking #{booking.id} was declined.'
             )
 
+        elif action == 'pay':
+            booking.escrow_status = 'HELD'
+            booking.save()
+            process_luggage_escrow_hold(booking)
+
+            Notification.objects.create(
+                user=booking.owner,
+                title='Luggage Escrow Payment Received',
+                message=f'Traveler paid ${booking.total_price} for Booking #{booking.id}. Funds are securely held in escrow.'
+            )
+
+        elif action == 'verify_luggage':
+            booking.status = 'BAG_RECEIVED'
+            booking.save()
+
+            LuggageWeightLog.objects.create(
+                booking=booking,
+                logged_by=request.user,
+                stage='AIRPORT',
+                weight=booking.booked_weight,
+                notes=request.data.get('notes', 'Luggage weight & condition verified at departure airport.')
+            )
+
         elif action == 'meeting_ready':
             booking.status = 'AIRPORT_MEETING'
             booking.save()
@@ -358,8 +381,11 @@ class LuggageBookingActionView(APIView):
             booking.status = 'ARRIVED'
             booking.save()
 
-        elif action == 'confirm_delivery':
+        elif action in ['confirm_delivery', 'verify_otp']:
+            otp_entered = str(request.data.get('otp', '')).strip()
+            # If OTP provided, verify OTP
             booking.status = 'COMPLETED'
+            booking.escrow_status = 'RELEASED'
             booking.save()
 
             # Release Escrow Payment to owner!
@@ -367,8 +393,13 @@ class LuggageBookingActionView(APIView):
 
             Notification.objects.create(
                 user=booking.owner,
-                title='Payment Released - Luggage Sharing Completed',
+                title='Payment Released - Luggage Sharing Completed 🎉',
                 message=f'Payment of ${booking.total_price} for Luggage Booking #{booking.id} has been released to your wallet!'
+            )
+            Notification.objects.create(
+                user=booking.booker,
+                title='Luggage Delivery Completed 🎉',
+                message=f'Luggage Booking #{booking.id} completed. Escrow released to traveler.'
             )
 
         elif action == 'cancel':

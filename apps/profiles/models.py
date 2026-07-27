@@ -30,7 +30,7 @@ class Profile(models.Model):
     
     # KYC Details
     kyc_status = models.CharField(max_length=20, choices=KYC_STATUS_CHOICES, default='NOT_SUBMITTED')
-    kyc_document_type = models.CharField(max_length=30, choices=DOC_TYPE_CHOICES, default='national_id_and_passport')
+    kyc_document_type = models.CharField(max_length=50, choices=DOC_TYPE_CHOICES, default='national_id_and_passport')
     kyc_document_front = models.TextField(null=True, blank=True)  # Store base64 or URL
     kyc_document_back = models.TextField(null=True, blank=True)
     kyc_passport = models.TextField(null=True, blank=True)

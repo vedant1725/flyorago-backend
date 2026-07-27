@@ -23,6 +23,21 @@ class Booking(models.Model):
         ('DISPUTE_REJECTED', 'DISPUTE_REJECTED'),
         ('REJECTED', 'REJECTED'),
         ('CANCELLED', 'CANCELLED'),
+        ('Draft', 'Draft'),
+        ('Waiting Traveller', 'Waiting Traveller'),
+        ('Booking Requested', 'Booking Requested'),
+        ('Traveller Accepted', 'Traveller Accepted'),
+        ('Payment Pending', 'Payment Pending'),
+        ('Payment Completed', 'Payment Completed'),
+        ('Pickup Scheduled', 'Pickup Scheduled'),
+        ('Parcel Verification', 'Parcel Verification'),
+        ('Risk Analysis', 'Risk Analysis'),
+        ('Ready For Transit', 'Ready For Transit'),
+        ('In Transit', 'In Transit'),
+        ('Flight Landed', 'Flight Landed'),
+        ('Out For Delivery', 'Out For Delivery'),
+        ('Delivered', 'Delivered'),
+        ('Completed', 'Completed'),
     )
 
     PAYMENT_STATUS_CHOICES = (

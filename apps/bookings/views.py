@@ -110,7 +110,7 @@ class BookingActionView(views.APIView):
                 booking = BookingWorkflowService.send_request(booking)
                 return success_response(data=BookingSerializer(booking).data, message="Booking request sent")
 
-            elif action == 'ACCEPT':
+            elif action in ['ACCEPT', 'Accept']:
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can accept")
                 booking = BookingWorkflowService.accept_request(booking)
@@ -123,7 +123,7 @@ class BookingActionView(views.APIView):
                 )
                 return success_response(data=BookingSerializer(booking).data, message="Booking accepted")
 
-            elif action == 'REJECT':
+            elif action in ['REJECT', 'Reject']:
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can reject")
                 booking.status = 'REJECTED'
@@ -143,7 +143,7 @@ class BookingActionView(views.APIView):
                 )
                 return success_response(data=BookingSerializer(booking).data, message="Booking rejected")
 
-            elif action == 'PAY':
+            elif action in ['PAY', 'MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW']:
                 if not is_sender and not is_admin:
                     return failure_response(message="Only sender can pay")
                 booking = BookingWorkflowService.process_payment(booking)
@@ -161,7 +161,7 @@ class BookingActionView(views.APIView):
                 booking = BookingWorkflowService.update_transit_status(booking, 'IN_TRANSIT')
                 return success_response(data=BookingSerializer(booking).data, message="Transit started")
 
-            elif action == 'ARRIVED':
+            elif action in ['ARRIVED', 'FLIGHT_LANDED']:
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can mark arrived")
                 booking = BookingWorkflowService.update_transit_status(booking, 'ARRIVED')

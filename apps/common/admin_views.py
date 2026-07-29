@@ -99,12 +99,20 @@ class AdminStatsView(views.APIView):
 
         total_users = User.objects.count()
         new_users_week = User.objects.filter(date_joined__gte=week_ago).count()
+<<<<<<< HEAD
         active_trips = Trip.objects.filter(status__in=['Active', 'ACTIVE', 'Active Trip']).count()
+=======
+        active_trips = Trip.objects.filter(status='Active').count()
+>>>>>>> b6aebf3ac52853fc37c85b070110a3846fe198e2
         total_trips = Trip.objects.count()
         parcel_requests = Booking.objects.count()
         new_bookings_week = Booking.objects.filter(created_at__gte=week_ago).count()
         total_shipments = Shipment.objects.count()
+<<<<<<< HEAD
         in_transit = Shipment.objects.filter(status__in=['In Transit', 'IN_TRANSIT', 'Out for Handoff']).count()
+=======
+        in_transit = Shipment.objects.filter(status='In Transit').count()
+>>>>>>> b6aebf3ac52853fc37c85b070110a3846fe198e2
         pending_kyc = Profile.objects.filter(kyc_status='PENDING').count()
         approved_kyc = Profile.objects.filter(kyc_status='APPROVED').count()
 
@@ -131,6 +139,7 @@ class AdminStatsView(views.APIView):
             },
             'tripBreakdown': {
                 'active': active_trips,
+<<<<<<< HEAD
                 'completed': Trip.objects.filter(status__in=['Completed', 'COMPLETED', 'PAYMENT_RELEASED']).count(),
                 'cancelled': Trip.objects.filter(status__in=['Cancelled', 'CANCELLED']).count(),
             },
@@ -139,6 +148,16 @@ class AdminStatsView(views.APIView):
                 'confirmed': Booking.objects.filter(status__in=['ACCEPTED', 'PAID', 'PARCEL_VERIFIED', 'Traveller Accepted', 'Confirmed', 'Payment Completed', 'Ready For Transit']).count(),
                 'completed': Booking.objects.filter(status__in=['DELIVERED', 'PAYMENT_RELEASED', 'Completed']).count(),
                 'cancelled': Booking.objects.filter(status__in=['REJECTED', 'CANCELLED', 'Cancelled', 'Rejected']).count(),
+=======
+                'completed': Trip.objects.filter(status='Completed').count(),
+                'cancelled': Trip.objects.filter(status='Cancelled').count(),
+            },
+            'bookingBreakdown': {
+                'pending': Booking.objects.filter(status='Pending').count(),
+                'confirmed': Booking.objects.filter(status='Confirmed').count(),
+                'completed': Booking.objects.filter(status='Completed').count(),
+                'cancelled': Booking.objects.filter(status='Cancelled').count(),
+>>>>>>> b6aebf3ac52853fc37c85b070110a3846fe198e2
             },
             'userRoles': role_counts,
         }, message='Admin stats fetched')

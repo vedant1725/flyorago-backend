@@ -375,8 +375,3 @@ LOGGING = {
         },
     },
 }
-
-# AI Assistant Settings
-AI_PROVIDER = env('AI_PROVIDER', default='gemini')
-GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
-

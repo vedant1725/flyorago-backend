@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import FAQ, Ticket, TicketReply, Dispute, DisputeImage
+from .models import FAQ, Ticket, TicketReply, Dispute, DisputeImage, ContactMessage
 from bookings.serializers import BookingSerializer
 
 class FAQSerializer(serializers.ModelSerializer):
@@ -62,3 +62,9 @@ class AdminDisputeSerializer(serializers.ModelSerializer):
         
     def get_raised_by_email(self, obj):
         return obj.raised_by.email
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactMessage
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at')

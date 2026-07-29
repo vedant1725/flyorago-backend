@@ -8,6 +8,7 @@ from common.admin_views import (
     AdminStatsView, AdminChartDataView,
     AdminTripsListView, AdminBookingsListView, AdminShipmentsListView, AdminUsersListView,
     AdminTripActionView, AdminBookingActionView, AdminShipmentActionView, AdminUserActionView,
+    AdminChangeCredentialsView,
 )
 
 urlpatterns = [
@@ -26,6 +27,7 @@ urlpatterns = [
     path('api/admin/bookings/', AdminBookingsListView.as_view(), name='admin_bookings'),
     path('api/admin/shipments/', AdminShipmentsListView.as_view(), name='admin_shipments'),
     path('api/admin/users/', AdminUsersListView.as_view(), name='admin_users'),
+    path('api/admin/change-credentials/', AdminChangeCredentialsView.as_view(), name='admin_change_credentials'),
 
     # ── Admin Panel: CRUD Actions ──
     path('api/admin/trips/<int:pk>/', AdminTripActionView.as_view(), name='admin_trip_action'),

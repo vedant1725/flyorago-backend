@@ -5,8 +5,8 @@ from decimal import Decimal
 from drf_spectacular.utils import extend_schema
 from rest_framework.parsers import MultiPartParser, FormParser
 
-from .models import FAQ, Ticket, TicketReply, Dispute, DisputeImage
-from .serializers import FAQSerializer, TicketSerializer, TicketReplySerializer, DisputeSerializer, AdminDisputeSerializer
+from .models import FAQ, Ticket, TicketReply, Dispute, DisputeImage, ContactMessage
+from .serializers import FAQSerializer, TicketSerializer, TicketReplySerializer, DisputeSerializer, AdminDisputeSerializer, ContactMessageSerializer
 from common.responses import success_response, failure_response
 from common.permissions import IsKYCApproved
 from wallet.models import Wallet, Transaction
@@ -210,3 +210,62 @@ class AdminDisputeActionView(views.APIView):
         BookingWorkflowService.trigger_websocket_notification(booking, "dispute_updated", notification_msg)
 
         return success_response(data=AdminDisputeSerializer(dispute).data, message=f"Dispute {action.lower()}d successfully.")
+
+class ContactMessageCreateView(generics.CreateAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = ContactMessageSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            contact = serializer.save()
+            return success_response(
+                data=serializer.data,
+                message="Your message has been received! Our support team will respond shortly.",
+                status_code=status.HTTP_201_CREATED
+            )
+        return failure_response(errors=serializer.errors, message="Failed to send contact message")
+
+class AdminContactMessageListView(generics.ListAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = ContactMessageSerializer
+
+    def get_queryset(self):
+        queryset = ContactMessage.objects.all().order_by('-created_at')
+        status_filter = self.request.query_params.get('status')
+        q = self.request.query_params.get('q')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if q:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(full_name__icontains=q) |
+                Q(email__icontains=q) |
+                Q(subject__icontains=q) |
+                Q(message__icontains=q)
+            )
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return success_response(data=serializer.data, message="Contact messages retrieved successfully")
+
+class AdminContactMessageDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = ContactMessageSerializer
+    queryset = ContactMessage.objects.all()
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return success_response(data=serializer.data, message="Contact message updated successfully")
+        return failure_response(errors=serializer.errors, message="Failed to update contact message")
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return success_response(message="Contact message deleted successfully")

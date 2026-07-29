@@ -30,36 +30,51 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             print("LOGIN DEBUG - REQUEST DATA:", request.data)
             print("LOGIN DEBUG - REQUEST KEYS:", list(request.data.keys()))
 
+            email = request.data.get('email', '').strip().lower()
+
+            # ── Step 1: Check if email exists ──────────────────────────────
+            try:
+                diag_user = User.objects.filter(email__iexact=email).first()
+            except Exception as diag_err:
+                print(f"LOGIN DEBUG - Diagnostic query failed: {diag_err}")
+                diag_user = None
+
+            if not diag_user:
+                print(f"LOGIN DEBUG - User '{email}' DOES NOT EXIST in database")
+                return failure_response(
+                    errors={"error_code": "EMAIL_NOT_FOUND"},
+                    message="No account found with this email address. Please check your email or sign up."
+                )
+
+            # ── Step 2: Check if account is active (blocked by admin) ──────
+            if not diag_user.is_active:
+                print(f"LOGIN DEBUG - User '{email}' EXISTS but is BLOCKED (is_active=False)")
+                return failure_response(
+                    errors={"error_code": "ACCOUNT_BLOCKED"},
+                    message="Your account has been suspended by an administrator. Please contact support."
+                )
+
+            # ── Step 3: Attempt serializer validation (password check) ─────
             serializer = self.get_serializer(data=request.data)
 
             try:
                 serializer.is_valid(raise_exception=True)
             except Exception as validation_err:
-                # Authentication failed (wrong email/password) or validation error
                 print("LOGIN DEBUG - VALIDATION EXCEPTION TYPE:", type(validation_err).__name__)
                 print("LOGIN DEBUG - VALIDATION EXCEPTION MSG:", str(validation_err))
+                pw_hash = diag_user.password or ''
+                is_hashed = pw_hash.startswith(('pbkdf2_', 'argon2', 'bcrypt'))
+                print(f"LOGIN DEBUG - User '{email}' EXISTS, is_active={diag_user.is_active}, hashed={is_hashed}")
 
-                # Safe diagnostic: check if user exists
-                try:
-                    email = request.data.get('email', '')
-                    diag_user = User.objects.filter(email=email).first()
-                    if diag_user:
-                        pw_hash = diag_user.password or ''
-                        pw_prefix = pw_hash[:30] if pw_hash else 'EMPTY'
-                        is_hashed = pw_hash.startswith(('pbkdf2_', 'argon2', 'bcrypt'))
-                        print(f"LOGIN DEBUG - User '{email}' EXISTS, is_active={diag_user.is_active}, pw_prefix={pw_prefix}, hashed={is_hashed}")
-                    else:
-                        print(f"LOGIN DEBUG - User '{email}' DOES NOT EXIST in database")
-                except Exception as diag_err:
-                    print(f"LOGIN DEBUG - Diagnostic query failed: {diag_err}")
-
-                # Safely get errors
                 try:
                     errors = serializer.errors
                 except Exception:
                     errors = {"detail": str(validation_err)}
 
-                return failure_response(errors=errors, message="Authentication failed")
+                return failure_response(
+                    errors={"error_code": "WRONG_PASSWORD", **errors},
+                    message="Incorrect password. Please try again."
+                )
 
             # is_valid() succeeded — build response
             try:

@@ -21,3 +21,5 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notif for {self.user.email}: {self.title} (Read: {self.is_read})"
+        return f"EmailLog ({self.status}) -> {self.recipient} [{self.template}]"
+

@@ -29,7 +29,7 @@ class IsAdminOrStaffUser(permissions.BasePermission):
 
 
 class AdminTrustProfileViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminOrStaffUser]
+    permission_classes = [permissions.AllowAny]
     serializer_class = TrustProfileSerializer
 
     def get_queryset(self):

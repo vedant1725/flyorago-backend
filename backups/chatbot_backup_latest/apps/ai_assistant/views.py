@@ -28,18 +28,7 @@ class FlyoraAIChatView(APIView):
 
         history = request.data.get('history', [])
 
-        try:
-            response_data = LLMEngine.generate_response(prompt, user_context, history)
-            if not response_data or not isinstance(response_data, dict):
-                raise ValueError("Invalid AI engine response format")
-        except Exception as e:
-            print(f"Error in FlyoraAIChatView: {e}")
-            response_data = {
-                "text": "I am here to help! Please ask any question about luggage sharing, parcel delivery, escrow payments, or safety rules.",
-                "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"]],
-                "provider": "fallback",
-                "timestamp": "Just now"
-            }
+        response_data = LLMEngine.generate_response(prompt, user_context, history)
 
         return Response({
             'status': 'success',
@@ -111,7 +100,7 @@ class AdminAIKnowledgeView(APIView):
                 'answer': item.answer,
                 'is_active': item.is_active
             }
-        }, status=status.HTTP_201_CREATED)
+        }, status=210 if status.HTTP_201_CREATED else 201)
 
     def delete(self, request, pk=None):
         if not pk:

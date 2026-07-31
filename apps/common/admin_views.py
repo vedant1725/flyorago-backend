@@ -290,12 +290,16 @@ class AdminUserActionView(views.APIView):
     def patch(self, request, pk):
         try:
             user = User.objects.get(pk=pk)
+            fields_to_update = []
             if 'is_active' in request.data:
                 user.is_active = bool(request.data['is_active'])
+                fields_to_update.append('is_active')
             if 'role' in request.data:
                 user.role = request.data['role']
-            user.save()
-            return success_response(message='User updated successfully')
+                fields_to_update.append('role')
+            if fields_to_update:
+                user.save(update_fields=fields_to_update)
+            return success_response(message=f'User {"unblocked" if user.is_active else "blocked"} successfully')
         except User.DoesNotExist:
             return failure_response(message='User not found', status_code=404)
 

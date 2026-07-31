@@ -41,6 +41,7 @@ urlpatterns = [
 
     # KYC
     path('api/kyc/status/<str:user_id>/', KYCStatusView.as_view(), name='kyc_status'),
+    path('api/kyc/status/<str:user_id>', KYCStatusView.as_view(), name='kyc_status_no_slash'),
     path('api/kyc/submit/', KYCSubmitView.as_view(), name='kyc_submit'),
     path('api/kyc/admin/list/', KYCAdminListView.as_view(), name='kyc_admin_list'),
     path('api/kyc/admin/action/', KYCAdminActionView.as_view(), name='kyc_admin_action'),

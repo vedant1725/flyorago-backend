@@ -73,11 +73,17 @@ class LLMEngine:
         # If the query matches an explicit, existing policy or DB query
         # (e.g. Prescription Medicines, Prohibited Items/Drugs, Live DB Stats, Admin FAQs),
         # return the EXACT existing answer directly without altering or invoking Gemini.
+        api_key = getattr(settings, 'GEMINI_API_KEY', os.getenv('GEMINI_API_KEY', ''))
         kb_res = classify_intent_and_respond(prompt_text, user_context, history, db_items)
         if kb_res and not kb_res.get('is_fallback', False):
-            kb_res["provider"] = "knowledge_base"
-            cache.set(cache_key, kb_res, timeout=300)
-            return kb_res
+            # If Gemini API is active, allow complex comparative/analytical queries to fall through to Gemini Tier 2
+            is_complex_comparison = any(w in prompt_text.lower() for w in ['safer than', 'compare', 'better than', 'vs', 'versus', 'why choose', 'escrow protect my payment'])
+            if provider == 'gemini' and api_key and is_complex_comparison:
+                pass
+            else:
+                kb_res["provider"] = "knowledge_base"
+                cache.set(cache_key, kb_res, timeout=300)
+                return kb_res
 
         # -------------------------------------------------------------------
         # TIER 2: Gemini RAG Intelligence Layer
@@ -118,11 +124,11 @@ class LLMEngine:
     @classmethod
     def _call_gemini(cls, prompt: str, api_key: str, user_context: dict = None, history: list = None, db_items: list = None) -> dict:
         models = [
-            getattr(settings, 'GEMINI_MODEL', 'gemini-flash-latest'),
-            'gemini-flash-latest',
-            'gemini-flash-lite-latest',
-            'gemini-2.0-flash',
-            'gemini-1.5-flash'
+            getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash-latest'),
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-flash',
+            'gemini-1.5-pro-latest',
+            'gemini-2.0-flash-exp'
         ]
         # Preserve order while deduplicating
         candidate_models = list(dict.fromkeys([m for m in models if m]))
@@ -169,7 +175,7 @@ class LLMEngine:
                         headers={'Content-Type': 'application/json'}
                     )
                     
-                    with urllib.request.urlopen(req, timeout=12) as response:
+                    with urllib.request.urlopen(req, timeout=4) as response:
                         result = json.loads(response.read().decode('utf-8'))
                         candidates = result.get('candidates', [])
                         if candidates and candidates[0].get('content', {}).get('parts'):

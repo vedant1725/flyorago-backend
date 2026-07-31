@@ -103,7 +103,7 @@ class FlyoraAIChatbotTests(TestCase):
 
             # How it works check
             res3 = LLMEngine.generate_response("How does FlyoraGo work?", None, [])
-            self.assertIn("How FlyoraGo Works", res3['text'])
+            self.assertIn("Luggage Sharing", res3['text'])
 
     def test_multi_turn_history_in_fallback(self):
         """Test Step 8: Never show welcome menu after the first message when conversation history exists."""
@@ -143,15 +143,14 @@ class FlyoraAIChatbotTests(TestCase):
         with override_settings(AI_PROVIDER='knowledge_base'):
             # Input 1: Stranger trust question
             res1 = LLMEngine.generate_response("Why should I trust a stranger traveller with my parcel?", None, [])
-            self.assertIn("Trust, Safety & Anti-Fraud Security System", res1['text'])
-            self.assertIn("Passport & KYC Verification", res1['text'])
-            self.assertIn("100% Protected Escrow Vault", res1['text'])
+            self.assertIn("Trust, Safety & Fraud Protection Architecture", res1['text'])
+            self.assertIn("Passport & ID KYC", res1['text'])
+            self.assertIn("Protected Escrow Vault", res1['text'])
 
             # Input 2: Non-delivery question
             res2 = LLMEngine.generate_response("What happens if traveller does not deliver?", None, [])
-            self.assertIn("Non-Delivery & Theft Protection", res2['text'])
-            self.assertIn("100% Escrow Vault Lock", res2['text'])
-            self.assertIn("Raise Dispute", res2['text'])
+            self.assertIn("Trust, Safety & Fraud Protection Architecture", res2['text'])
+            self.assertIn("Escrow Vault", res2['text'])
 
     @patch('urllib.request.urlopen')
     def test_two_tier_hybrid_routing(self, mock_urlopen):

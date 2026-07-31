@@ -139,44 +139,34 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
     # -----------------------------------------------------------------------
     # GUJARATI LANGUAGE INTENT RESPONSES
     # -----------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # GUJARATI LANGUAGE INTENT RESPONSES
+    # -----------------------------------------------------------------------
     if lang == 'gu':
-        # Technical / API Query in Gujarati
-        if any(k in query_lower for k in ['work karti nathi', 'api', 'problem', 'error', 'chat boat', 'chatbot', 'nathi chal', 'connect', 'ans']):
-            return {
-                "text": (
-                    "🤖 **Flyora AI બોટ એપીઆઈ હવે સંપૂર્ણ રીતે ચાલુ અને કાર્યરત છે! (Flyora AI Bot API is fully working!):**\n\n"
-                    "અમારું સ્માર્ટ AI એન્જિન તમારા બધા પ્રશ્નોના જવાબ આપવા માટે તૈયાર છે. તમે પ્લેટફોર્મ વિશે નીચે આપેલા કોઈપણ વિષય પર માહિતી મેળવી શકો છો:\n\n"
-                    "૧. **લગેજ શેરિંગ (Luggage Sharing)**: ફ્લાઈટ મુસાફરોની વધારાની લગેજ કેપેસિટી કેવી રીતે બુક કરવી.\n"
-                    "૨. **પાર્સલ મોકલવું (Send Parcel)**: તમારું પેકેજ વિદેશ કે અન્ય સિટીમાં સુરક્ષિત રીતે મોકલવું.\n"
-                    "૩. **એસ્ક્રો વોલેટ પેમેન્ટ (Escrow Vault)**: ૧૦૦% સુરક્ષિત પેમેન્ટ – ડિલિવરી OTP કન્ફર્મ થયા પછી જ પેમેન્ટ મુસાફરને મળે છે.\n"
-                    "૪. **કેવાયસી અને પાસપોર્ટ વેરિફિકેશન (Trust & KYC)**: તમામ યુઝર્સનું ગવર્નમેન્ટ ID અને પાસપોર્ટ વેરિફિકેશન.\n"
-                    "૫. **દવાઓ અને નીતિઓ (Medicine & Rules)**: ફક્ત ડોક્ટરના પ્રિસ્ક્રિપ્શન વાળી સીલ્ડ દવાઓ જ માન્ય છે.\n\n"
-                    "તમારો કોઈપણ પ્રશ્ન ગુજરાતી અથવા English માં મુક્તપણે પૂછો!"
-                ),
-                "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"], QUICK_NAV_ACTIONS["wallet"]],
-                "timestamp": "Just now"
-            }
-
-        if any(k in query_lower for k in ['drug', 'narcotic', 'ganja', 'dawa', 'illegal', 'bandhi', 'aushadhi', 'medicine']):
-            if any(k in query_lower for k in ['dawa', 'medicine', 'aushadhi', 'doctor']):
+        if any(k in query_lower for k in ['drug', 'narcotic', 'ganja', 'dawa', 'illegal', 'bandhi', 'aushadhi', 'medicine', 'dava', 'દવા', 'દવાઓ', 'ઔષધ', 'ડ્રગ્સ', 'પ્રતિબંધિત']):
+            if any(k in query_lower for k in ['dawa', 'dava', 'medicine', 'aushadhi', 'doctor', 'prescription', 'દવા', 'દવાઓ', 'ઔષધ', 'ડોક્ટર', 'પ્રિસ્ક્રિપ્શન']):
                 return {
                     "text": (
-                        "💊 **દવાઓ (Medicines) મોકલવા અંગેના નિયમો:**\n\n"
-                        "૧. **ડોક્ટરનું પ્રિસ્ક્રિપ્શન ફરજિયાત**: ફક્ત લીગલ/ડોક્ટર દ્વારા પ્રમાણિત દવાઓ જ મોકલી શકાય છે.\n"
-                        "૨. **ગેરકાયદેસર ડ્રગ્સ પર સંપૂર્ણ પ્રતિબંધ**: કોઈપણ નશીલા પદાર્થો, ગેરકાયદે ડ્રગ્સ કે કેમિકલ્સ મોકલવા પર સખત પ્રતિબંધ છે.\n"
-                        "૩. **તપાસ & ફોટો**: પેકેજ સ્વીકારતા પહેલા મુસાફર (Traveler) દવાના બોક્સ અને બિલની ચકાસણી કરે છે."
+                        "💊 **દવાઓ (Medicines) મોકલવા અંગેના સત્તાવાર નિયમો & સુરક્ષા પોલિસી:**\n\n"
+                        "FlyoraGo પ્લેટફોર્મ પર ફક્ત માન્ય અને સુરક્ષિત દવાઓ જ મોકલી શકાય છે:\n\n"
+                        "૧. **ડોક્ટરનું વૈધ પ્રિસ્ક્રિપ્શન (Doctor Prescription)**: દવાના માલિકના નામ સાથે મેળ ખાતું ડોક્ટરનું ઓરિજિનલ લેટર કે પ્રિસ્ક્રિપ્શન બતાવવું ફરજિયાત છે.\n"
+                        "૨. **ઓરિજિનલ સીલ્ડ પેકિંગ (Sealed Commercial Packaging)**: દવાઓ ઓરિજિનલ સીલ્ડ બોક્સ કે પેકિંગમાં જ હોવી જોઈએ. ખુલ્લી ગોળીઓ કે સ્ટ્રીપ્સ સ્વીકારવામાં આવતી નથી.\n"
+                        "૩. **એરપોર્ટ હેન્ડઓવર તપાસ (Physical Inspection)**: ફ્લાઈટમાં જતા પહેલા ટ્રેવલર (Traveler) દવાના બોક્સ અને બિલની સ્થળ પર જ ચકાસણી કરે છે.\n"
+                        "૪. **ગેરકાયદેસર ડ્રગ્સ પર સંપૂર્ણ પ્રતિબંધ (Zero-Tolerance)**: કોઈપણ પ્રકારના નશીલા પદાર્થો કે ગેરકાયદે કેમિકલ્સ પર ૧૦૦% પ્રતિબંધ છે."
                     ),
                     "actions": [QUICK_NAV_ACTIONS["trust"], QUICK_NAV_ACTIONS["kyc"]],
                     "timestamp": "Just now"
                 }
             return {
                 "text": (
-                    "🚫 **પ્રતિબંધિત વસ્તુઓની નીતિ (Prohibited Items Policy):**\n\n"
-                    "FlyoraGo પર ગેરકાયદેસર કે જોખમી વસ્તુઓ મોકલવા પર સખત પ્રતિબંધ છે:\n"
-                    "• **ડ્રગ્સ અને નશીલા પદાર્થો**: કોઈપણ પ્રકારના નશા કે ગેરકાયદે પદાર્થો.\n"
-                    "• **હથિયારો અને વિસ્ફોટકો**: બંદૂક, ચાકુ, ફટાકડા કે ભયાનક કેમિકલ્સ.\n\n"
-                    "**નિયમ ઉલ્લંઘન પર કાર્યવાહી:**\n"
-                    "ખાતું કાયમ માટે બંધ કરવામાં આવશે અને એવિએશન પોલીસને જાણ કરવામાં આવશે."
+                    "🚫 **પ્રતિબંધિત વસ્તુઓની નીતિ (Prohibited Items & Safety Policy):**\n\n"
+                    "FlyoraGo પ્લેટફોર્મ પર કોઈપણ ગેરકાયદેસર કે જોખમી સામાન મોકલવો સખત ગુનો છે:\n\n"
+                    "• **ડ્રગ્સ અને નશીલા પદાર્થો**: તમામ પ્રકારના ગેરકાયદેસર ડ્રગ્સ, ગાંજો કે સિન્થેટિક કેમિકલ્સ.\n"
+                    "• **હથિયારો અને વિસ્ફોટકો**: બંદૂક, ચાકુ, દારૂગોળો, ફટાકડા કે ભયાનક કેમિકલ્સ.\n"
+                    "• **ગેરકાયદેસર સામાન**: બિનઅધિકૃત ચલણ કે સરકાર દ્વારા પ્રતિબંધિત વસ્તુઓ.\n\n"
+                    "**સુરક્ષા કાર્યવાહી:**\n"
+                    "૧. ટ્રેવલર સામાન ચેક-ઈન કરતા પહેલા દરેક સામાનની ફિઝિકલ તપાસ કરે છે.\n"
+                    "૨. નિયમનું ઉલ્લંઘન કરનારનું એકાઉન્ટ કાયમ માટે સસ્પેન્ડ કરી એવિએશન પોલીસને જાણ કરાશે."
                 ),
                 "actions": [QUICK_NAV_ACTIONS["trust"]],
                 "timestamp": "Just now"
@@ -185,70 +175,64 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
         if any(k in query_lower for k in ['luggage', 'bhaadu', 'weight', 'kilo', 'baggage', 'samman', 'luggage sharing']):
             return {
                 "text": (
-                    "🧳 **લગેજ શેરિંગ (Luggage Sharing) કેવી રીતે કામ કરે છે:**\n\n"
-                    "૧. **મુસાફર ફ્લાઈટ એડ કરે છે**: ટ્રેવલર પોતાની ફ્લાઈટ અને ઉપલબ્ધ વજન (દા.ત. 15 kg) લિસ્ટ કરે છે.\n"
-                    "૨. **મોકલનાર ઓર્ડર બુક કરે છે**: સુંદર પોતાની સુટકેસ કે પેકેજ મોકલવા ટ્રેવલર સાથે કનેક્ટ થાય છે.\n"
-                    "૩. **એસ્ક્રો વોલેટ સુવિધાઓ**: પેમેન્ટ FlyoraGo Escrow Vault માં સુરક્ષિત રીતે ડિપોઝિટ થાય છે.\n"
-                    "૪. **6-Digit OTP કન્ફર્મેશન**: સામાન પહોંચ્યા પછી રેસિપિએન્ટ OTP આપે એટલે પેમેન્ટ ટ્રેવલરને મળે છે."
+                    "🧳 **લગેજ શેરિંગ (Luggage Sharing) ની કામગીરી અને નિયમો:**\n\n"
+                    "FlyoraGo મુસાફરોની વધારાની લગેજ કેપેસિટી અને સામાન મોકલનાર યુઝર્સને કનેક્ટ કરે છે:\n\n"
+                    "૧. **ફ્લાઈટ લિસ્ટિંગ**: ફ્લાઈટ મુસાફર પોતાનો ફ્લાઈટ રૂટ અને વધારાનું વજન (દા.ત. 15 kg) લિસ્ટ કરી કમાણી કરી શકે છે.\n"
+                    "૨. **રિક્વેસ્ટ & બુકિંગ**: સામાન મોકલનાર યુઝર પોતાના રૂટની ફ્લાઈટ શોધી ઓર્ડર બુક કરે છે.\n"
+                    "૩. **૧૦૦% એસ્ક્રો વોલેટ પેમેન્ટ**: પેમેન્ટ સુરક્ષિત રીતે FlyoraGo Escrow Vault માં જમા થાય છે, જે મુસાફરને અગાઉથી મળતું નથી.\n"
+                    "૪. **૬-અંકનો OTP કન્ફર્મેશન**: સામાન પહોંચ્યા પછી રેસિપિએન્ટ OTP આપે એટલે તરત જ પેમેન્ટ ટ્રેવલરના વોલેટમાં જમા થઈ જાય છે."
                 ),
                 "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["trips"]],
-                "timestamp": "Just now"
+                "timestamp": "Just now",
+                "is_fallback": True
             }
 
-        if any(k in query_lower for k in ['paisa', 'payment', 'escrow', 'safe', 'wallet', 'refund', 'money']):
+        if any(k in query_lower for k in ['trust', 'stranger', 'paisa', 'payment', 'escrow', 'safe', 'wallet', 'refund', 'money']):
             return {
                 "text": (
-                    "💰 **એસ્ક્રો વોલેટ પેમેન્ટ સુરક્ષા (Escrow Payment Security):**\n\n"
-                    "• **૧૦૦% સુરક્ષિત એસ્ક્રો**: તમારું પેમેન્ટ અગાઉથી સીધું મુસાફરને અપાતું નથી.\n"
-                    "• **OTP સિસ્ટમ**: રેસિપિએન્ટ પાર્સલ સ્વીકારીને ૬-અંકનો OTP આપે ત્યારે જ પૈસા મુસાફરના વોલેટમાં ક્રેડિટ થાય છે.\n"
-                    "• **ડિલિવરી કેન્સલ થાય તો**: જો ફ્લાઈટ કેન્સલ થાય કે ટ્રેવલર ના પહોંચાડે, તો સુંદરને ૧૦૦% રિફંડ મળે છે."
+                    "🛡️ **સુરક્ષા, એસ્ક્રો પેમેન્ટ અને ટ્રસ્ટ આર્કિટેક્ચર (Trust & Security):**\n\n"
+                    "FlyoraGo પ્લેટફોર્મ પર તમારો સામાન અને પૈસા ૧૦૦% સુરક્ષિત રહે છે:\n\n"
+                    "૧. **ગવર્નમેન્ટ ID અને પાસપોર્ટ KYC**: તમામ યુઝર્સ અને મુસાફરોનું ગવર્નમેન્ટ પાસપોર્ટ વેરિફિકેશન થાય છે.\n"
+                    "૨. **૧૦૦% એસ્ક્રો વોલેટ લોક**: તમારું પેમેન્ટ એસ્ક્રો વૉલ્ટમાં લોક રહે છે – મુસાફરને ડિલિવરી પહેલા પૈસા મળતા નથી.\n"
+                    "૩. **૬-અંકનો ડિલિવરી OTP**: સામાન યોગ્ય વ્યક્તિ સુધી પહોંચે અને OTP દાખલ થાય ત્યારે જ પેમેન્ટ રિલીઝ થાય છે.\n"
+                    "૪. **૧૦૦% રિફંડ ગેરંટી**: જો ફ્લાઈટ કેન્સલ થાય કે ટ્રેવલર સામાન ના પહોંચાડે, તો સુંદરને ૧૦૦% પૈસા પાછા મળે છે."
                 ),
-                "actions": [QUICK_NAV_ACTIONS["wallet"], QUICK_NAV_ACTIONS["support"]],
-                "timestamp": "Just now"
+                "actions": [QUICK_NAV_ACTIONS["wallet"], QUICK_NAV_ACTIONS["trust"], QUICK_NAV_ACTIONS["support"]],
+                "timestamp": "Just now",
+                "is_fallback": True
             }
 
         return {
             "text": (
-                "✈️ **FlyoraGo પ્લેટફોર્મની સંપૂર્ણ વિગત (How It Works):**\n\n"
-                "૧. **મુસાફર (Traveler)**: પોતાની ફ્લાઈટ અને ખાલી લગેજ કેપેસિટી (દા.ત. 15 kg) એડ કરે છે.\n"
-                "૨. **મોકલનાર (Sender)**: પોતાની સુટકેસ/સામાન મોકલવા માટે ટ્રેવલર સર્ચ કરે છે.\n"
-                "૩. **એસ્ક્રો પેમેન્ટ (Escrow Vault)**: પેમેન્ટ FlyoraGo એસ્ક્રો વોલેટમાં ૧૦૦% સુરક્ષિત રહે છે.\n"
-                "૪. **OTP ડિલિવરી**: સામાન પહોંચ્યા પછી 6-અંકનો OTP આપવાથી પેમેન્ટ મુસાફરને મળે છે.\n\n"
-                "કોઈપણ ચોક્કસ માહિતી માટે તમારો પ્રશ્ન મુક્તપણે લખો!"
+                "✈️ **FlyoraGo પ્લેટફોર્મ સેવાઓ અને સુરક્ષા નીતિ (Platform Overview):**\n\n"
+                "૧. **લગેજ શેરિંગ (Luggage Sharing)**: ફ્લાઈટ મુસાફરો પોતાની વધારાની ચેક-ઈન સ્પેસ શેર કરીને કમાણી કરી શકે છે.\n"
+                "૨. **પાર્સલ ડિલિવરી (Parcel Delivery)**: સુંદર પોતાના પાર્સલ સીધા મેચિંગ ફ્લાઈટ ટ્રેવલર સાથે મોકલી શકે છે.\n"
+                "૩. **એસ્ક્રો વોલેટ લોક (Escrow Protection)**: ૧૦૦% નાણાકીય સુરક્ષા – 6-Digit OTP પછી જ પેમેન્ટ રિલીઝ થાય છે.\n"
+                "૪. **પાસપોર્ટ KYC વેરિફિકેશન**: ગવર્નમેન્ટ આઈડી ચેક દ્વારા ચોરી કે ફ્રોડ સામે રક્ષણ.\n\n"
+                "તમારો પ્રશ્ન ગુજરાતી અથવા English માં મુક્તપણે પૂછો!"
             ),
             "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"], QUICK_NAV_ACTIONS["wallet"]],
-            "timestamp": "Just now"
+            "timestamp": "Just now",
+            "is_fallback": True
         }
 
     # -----------------------------------------------------------------------
     # HINDI LANGUAGE INTENT RESPONSES
     # -----------------------------------------------------------------------
     if lang == 'hi':
-        if any(k in query_lower for k in ['work', 'api', 'problem', 'error', 'chat boat', 'chatbot', 'nahi chal', 'connect']):
-            return {
-                "text": (
-                    "🤖 **Flyora AI बोट एपीआई पूरी तरह से सक्रिय और चालू है! (Flyora AI API is Fully Working!):**\n\n"
-                    "हमारा एआई इंजन आपके सभी सवालों के सटीक और पूर्ण उत्तर देने के लिए तैयार है। आप FlyoraGo प्लेटफॉर्म के बारे में निम्नलिखित जानकारी प्राप्त कर सकते हैं:\n\n"
-                    "1. **लगेज शेयरिंग (Luggage Sharing)**: यात्रियों की बची हुई सामान क्षमता (Luggage Space) बुक करें।\n"
-                    "2. **पार्सल भेजें (Send Package)**: अपना सामान सुरक्षित रूप से देश/विदेश भेजें।\n"
-                    "3. **एस्क्रो वॉलेट सुरक्षा (Escrow Vault)**: 100% सुरक्षित भुगतान – डिलीवरी OTP सत्यापन के बाद ही रिलीज होता है।\n"
-                    "4. **KYC एवं पासपोर्ट सत्यापन (Trust Score)**: सरकारी आईडी सत्यापन।"
-                ),
-                "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"], QUICK_NAV_ACTIONS["wallet"]],
-                "timestamp": "Just now"
-            }
-
         if any(k in query_lower for k in ['drug', 'narcotic', 'dawa', 'illegal', 'hathiyar', 'banned', 'medicine']):
             if any(k in query_lower for k in ['dawa', 'medicine', 'aushadhi', 'doctor']):
                 return {
                     "text": (
                         "💊 **दवाइयां (Medicines) भेजने के सुरक्षा नियम:**\n\n"
                         "1. **डॉक्टर का पर्चा अनिवार्य**: केवल वैध और डॉक्टर द्वारा प्रमाणित दवाइयां ही भेजी जा सकती हैं।\n"
-                        "2. **नशीले पदार्थों पर सख्त प्रतिबंध**: किसी भी प्रकार के अवैध ड्रग्स या खतरनाक केमिकल पर पूर्ण प्रतिबंध है।\n"
-                        "3. **भौतिक जांच**: यात्री (Traveler) पैकेज स्वीकार करने से पहले बिल और दवा की जांच करता है।"
+                        "2. **मूल सीलबंद पैकिंग**: दवाइयां कंपनी की मूल पैकेजिंग में होनी चाहिए।\n"
+                        "3. **नशीले पदार्थों पर सख्त प्रतिबंध**: किसी भी प्रकार के अवैध ड्रग्स या खतरनाक केमिकल पर पूर्ण प्रतिबंध है।\n"
+                        "4. **भौतिक जांच**: यात्री (Traveler) पैकेज स्वीकार करने से पहले बिल और दवा की जांच करता है।"
                     ),
                     "actions": [QUICK_NAV_ACTIONS["trust"], QUICK_NAV_ACTIONS["kyc"]],
-                    "timestamp": "Just now"
+                    "timestamp": "Just now",
+                    "is_fallback": True
                 }
             return {
                 "text": (
@@ -259,7 +243,8 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
                     "**कार्रवाई**: नियम तोड़ने पर अकाउंट हमेशा के लिए सस्पेंड कर पुलिस को रिपोर्ट किया जाएगा।"
                 ),
                 "actions": [QUICK_NAV_ACTIONS["trust"]],
-                "timestamp": "Just now"
+                "timestamp": "Just now",
+                "is_fallback": True
             }
 
         return {
@@ -271,41 +256,25 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
                 "4. **OTP डिलीवरी**: डिलीवरी पूरा होने पर 6-अंकों का OTP दर्ज करते ही यात्री को भुगतान मिल जाता है।"
             ),
             "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"]],
-            "timestamp": "Just now"
+            "timestamp": "Just now",
+            "is_fallback": True
         }
 
     # -----------------------------------------------------------------------
-    # ENGLISH INTENT RESPONSES (AUTHORITATIVE & FACTUAL)
+    # ENGLISH INTENT RESPONSES (AUTHORITATIVE, STEP-BY-STEP & FACTUAL)
     # -----------------------------------------------------------------------
-    # 0. INTENT: Technical & API Support Query
-    if any(k in query_lower for k in ['chat boat', 'chatbot', 'bot api', 'api work', 'work karti nathi', 'api issue', 'api status', 'login 400', 'login error']):
-        return {
-            "text": (
-                "🤖 **Flyora AI Chatbot API is 100% Operational & Online!**\n\n"
-                "The Flyora AI API service is fully functional and ready to provide complete, detailed assistance for all FlyoraGo services:\n\n"
-                "• **🧳 Luggage Sharing**: Monetize extra airline check-in baggage space or find verified travelers.\n"
-                "• **📦 Parcel Shipping**: Send items internationally or locally with live flight route matching.\n"
-                "• **💰 Escrow Vault**: 100% secure payment vault. Money is released only upon recipient 6-digit OTP entry.\n"
-                "• **🛡️ Trust Score & KYC**: Government Passport/ID verification and ratings.\n"
-                "• **🚫 Prohibited Items**: Zero tolerance for illegal goods; strict doctor prescription rules for medicines.\n\n"
-                "Feel free to ask any specific question!"
-            ),
-            "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"], QUICK_NAV_ACTIONS["wallet"]],
-            "timestamp": "Just now"
-        }
-
     # 1. INTENT: Prohibited Items vs Prescription Medicine Policy
-    if any(k in query_lower for k in ['drug', 'drugs', 'narcotic', 'weed', 'weapon', 'gun', 'knife', 'explosive', 'illegal', 'contraband', 'banned', 'restricted', 'smuggle', 'medicine', 'dawa', 'pills']):
-        if any(k in query_lower for k in ['medicine', 'prescription', 'dawa', 'pills', 'pharma', 'doctor']):
+    if any(k in query_lower for k in ['drug', 'drugs', 'narcotic', 'weed', 'weapon', 'gun', 'knife', 'explosive', 'illegal', 'contraband', 'banned', 'restricted', 'smuggle', 'medicine', 'dawa', 'pills', 'pharma']):
+        if any(k in query_lower for k in ['medicine', 'prescription', 'dawa', 'pills', 'pharma', 'doctor', 'medical']):
             return {
                 "text": (
-                    "💊 **Prescription Medicine Transport Policy:**\n\n"
-                    "Over-the-counter and prescription medicines are allowed only under strict safety rules:\n\n"
-                    "**Requirements:**\n"
-                    "1. **Valid Doctor Prescription**: Must accompany the package with owner name matching documents.\n"
-                    "2. **Original Sealed Packaging**: Medicines must be in sealed commercial packaging.\n"
-                    "3. **Physical Inspection**: Traveler inspects prescription and packaging prior to flight acceptance.\n"
-                    "4. **No Illegal Narcotics**: Controlled substances or illegal drugs without government clearance are strictly banned."
+                    "💊 **FlyoraGo Prescription Medicine Transport Policy:**\n\n"
+                    "Over-the-counter and prescription medicines are permitted on FlyoraGo ONLY under strict, verified compliance rules:\n\n"
+                    "**Mandatory Safety Requirements:**\n"
+                    "1. **Valid Doctor Prescription**: A official licensed doctor's prescription matching the sender/owner's legal name must accompany the package.\n"
+                    "2. **Original Sealed Commercial Packaging**: Medicines must remain factory-sealed in original commercial blisters/boxes with visible batch numbers and expiry dates. Loose pills or unsealed bottles are strictly rejected.\n"
+                    "3. **Physical Inspection at Handover**: The traveler inspects the physical prescription and sealed packaging at airport handover prior to flight departure.\n"
+                    "4. **Strict Narcotics & Controlled Substances Ban**: Narcotics, psychotropic substances, or unverified chemical compounds without government clearance are 100% prohibited."
                 ),
                 "actions": [QUICK_NAV_ACTIONS["trust"], QUICK_NAV_ACTIONS["kyc"]],
                 "timestamp": "Just now"
@@ -313,35 +282,35 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
 
         return {
             "text": (
-                "🚫 **Prohibited Items Policy & Zero-Tolerance Safety Rules:**\n\n"
-                "FlyoraGo strictly prohibits the transport or sharing of any illegal or dangerous goods:\n\n"
-                "• **Drugs & Narcotics**: Illegal substances, synthetic drugs, or unverified chemicals.\n"
-                "• **Weapons & Explosives**: Firearms, ammunition, knives, fireworks, or hazardous materials.\n"
-                "• **Restricted Contraband**: Undeclared currency over legal limits, counterfeit items, or illegal wildlife.\n\n"
-                "**Safety Enforcement:**\n"
-                "1. **Mandatory Physical Inspection**: Travelers photograph and inspect all items before flight departure.\n"
-                "2. **Immediate Rejection**: Any unverified package is rejected immediately.\n"
-                "3. **Law Enforcement Escalation**: Violators face permanent account bans and aviation police reporting."
+                "🚫 **FlyoraGo Prohibited Items Policy & Zero-Tolerance Safety Rules:**\n\n"
+                "FlyoraGo strictly prohibits the carriage, transport, or sharing of any illegal, hazardous, or restricted items:\n\n"
+                "• **Drugs & Narcotics**: Illegal narcotics, synthetic substances, unverified chemical compounds, or marijuana.\n"
+                "• **Weapons & Explosives**: Firearms, ammunition, knives, fireworks, flammable liquids, or dangerous goods.\n"
+                "• **Restricted Contraband**: Undeclared currency exceeding legal customs thresholds, counterfeit goods, or illegal wildlife products.\n\n"
+                "**Safety & Legal Enforcement:**\n"
+                "1. **Mandatory Handover Inspection**: Travelers photograph and physically inspect all items before flight check-in.\n"
+                "2. **Immediate Rejection**: Unverified or suspicious packages are rejected on the spot.\n"
+                "3. **Law Enforcement Escalation**: Violations result in permanent account bans, escrow forfeiture, and immediate reporting to aviation police and law enforcement."
             ),
             "actions": [QUICK_NAV_ACTIONS["trust"], QUICK_NAV_ACTIONS["kyc"]],
             "timestamp": "Just now"
         }
 
-    # 2. INTENT: How FlyoraGo Works (Platform Overview)
-    if any(k in query_lower for k in ['how it works', 'how does it work', 'how flyorago work', 'how does flyorago work', 'what is flyorago', 'overview', 'about platform', 'process', 'work']):
+    # 2. INTENT: Luggage Sharing & How FlyoraGo Works
+    if any(k in query_lower for k in ['luggage sharing', 'how luggage sharing work', 'how flyorago work', 'how does flyorago work', 'what is flyorago', 'overview', 'about platform', 'how it works', 'process']):
         return {
             "text": (
-                "✈️ **How FlyoraGo Works:**\n\n"
-                "FlyoraGo connects verified international travelers who have extra luggage capacity with senders who need packages delivered securely.\n\n"
-                "**Step-by-Step Process:**\n"
-                "1. **Publish Flight Trip**: Traveler adds flight route, departure date, and available baggage space (e.g. 15 KG).\n"
-                "2. **Find & Request**: Sender searches matching flight routes and submits a package request.\n"
-                "3. **Traveler Acceptance**: Traveler inspects package details and accepts the request.\n"
-                "4. **Escrow Hold**: Sender deposits shipping payment safely into **FlyoraGo Escrow Vault**.\n"
-                "5. **Physical Pickup**: Traveler inspects physical items at handover and uploads photo verification.\n"
-                "6. **OTP Delivery Confirmation**: Recipient provides the **6-Digit OTP code** to instantly release payment to the traveler."
+                "✈️ **FlyoraGo International Luggage Sharing & Parcel Marketplace:**\n\n"
+                "FlyoraGo connects verified international flight travelers who have unused check-in baggage capacity with senders who need packages delivered quickly and safely.\n\n"
+                "**Complete Step-by-Step Execution:**\n"
+                "1. **Publish Flight Route**: Traveler registers flight details, PNR, departure date, and available baggage weight (e.g. 10–30 KG).\n"
+                "2. **Search & Book**: Sender searches matching verified flight routes and submits a package shipping request.\n"
+                "3. **Traveler Inspection**: Traveler reviews package category, weight, and description, then accepts the booking.\n"
+                "4. **100% Escrow Vault Lock**: Sender deposits the reward safely into the **FlyoraGo Escrow Vault**. Funds are NEVER paid upfront to the traveler.\n"
+                "5. **Physical Airport Handover**: Traveler meets sender, performs physical photo inspection, and uploads verification photos.\n"
+                "6. **Cryptographic 6-Digit OTP Delivery**: Recipient provides the secret **6-digit OTP** at delivery, instantly releasing payout to the traveler's wallet."
             ),
-            "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"]],
+            "actions": [QUICK_NAV_ACTIONS["luggage"], QUICK_NAV_ACTIONS["sender"], QUICK_NAV_ACTIONS["wallet"]],
             "timestamp": "Just now"
         }
 
@@ -351,10 +320,10 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
             "text": (
                 "💰 **Traveller Earning & Payout Workflow:**\n\n"
                 "Travelers monetize unused airline check-in baggage capacity by delivering verified parcels.\n\n"
-                "**Earning Rules:**\n"
-                "• **Custom Reward Rates**: Earn per KG based on flight route popularity ($10 - $30 per KG).\n"
-                "• **100% Escrow Hold**: Sender funds are locked in Escrow before flight departure.\n"
-                "• **Instant Release**: Released directly to your Flyora Wallet upon valid 6-Digit OTP code entry at destination handover."
+                "**Earning Architecture:**\n"
+                "• **Competitive Earnings**: Earn $10 – $30 per KG depending on flight route demand and urgency.\n"
+                "• **100% Protected Escrow**: Sender payments are secured in Escrow before flight departure.\n"
+                "• **Instant OTP Release**: Funds transfer immediately to your Flyora Wallet upon entering the recipient's valid **6-digit OTP** code at delivery."
             ),
             "actions": [QUICK_NAV_ACTIONS["trips"], QUICK_NAV_ACTIONS["wallet"]],
             "timestamp": "Just now"
@@ -364,13 +333,13 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
     if any(k in query_lower for k in ['send package', 'sender workflow', 'track delivery', 'shipping steps', 'package request', 'send parcel']):
         return {
             "text": (
-                "📦 **Sender Package Delivery Workflow:**\n\n"
-                "1. **Create Request**: Enter parcel weight, category, origin, and destination.\n"
-                "2. **Select Traveler**: Choose from verified travelers flying your exact route.\n"
-                "3. **Escrow Payment**: Deposit reward safely into Escrow Hold.\n"
-                "4. **Handover Inspection**: Meet traveler for physical inspection & photo verification.\n"
-                "5. **Track Flight**: Track transit status updates in real-time.\n"
-                "6. **Confirm Delivery**: Share the **6-Digit OTP** with the recipient to complete delivery."
+                "📦 **Sender Package Shipping & Real-Time Tracking Workflow:**\n\n"
+                "1. **Create Parcel Request**: Specify weight, dimensions, category, origin, and destination.\n"
+                "2. **Match Verified Traveler**: Select from verified travelers flying your exact flight route.\n"
+                "3. **Escrow Vault Deposit**: Deposit shipping reward safely into Escrow (never direct cash/wire transfers).\n"
+                "4. **Airport Handover**: Meet traveler for physical item inspection and photo logging.\n"
+                "5. **Real-Time Flight Tracking**: Monitor flight departure, transit, and arrival milestones.\n"
+                "6. **Recipient OTP Confirmation**: Share the secret 6-digit OTP with your recipient to confirm physical delivery."
             ),
             "actions": [QUICK_NAV_ACTIONS["sender"], QUICK_NAV_ACTIONS["trips"]],
             "timestamp": "Just now"
@@ -385,65 +354,29 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
         'protection', 'protect', 'secure', 'security', 'guarantee', 'reliable', 'reliability'
     ]
     if any(k in query_lower for k in trust_safety_keywords):
-        # Non-Delivery & Theft Protection Sub-Intent
-        if any(k in query_lower for k in ['not deliver', 'does not deliver', 'fails to deliver', 'fail to deliver', 'steal', 'stolen', 'thief', 'rob', 'lost']):
-            return {
-                "text": (
-                    "🛡️ **FlyoraGo Non-Delivery & Theft Protection (Escrow & Dispute):**\n\n"
-                    "FlyoraGo guarantees complete package protection if a traveler fails to deliver or attempts theft:\n\n"
-                    "1. **100% Escrow Vault Lock**: Your shipping reward is held securely in Escrow and is NEVER paid to the traveler upfront.\n"
-                    "2. **Cryptographic OTP Handover**: Funds are ONLY released if your designated recipient receives the parcel and provides the secret 6-digit OTP.\n"
-                    "3. **Raise Dispute & Instant Freeze**: If a traveler does not deliver or vanishes, click 'Raise Dispute'. Your funds are locked immediately, and FlyoraGo issues a **100% full refund** to your wallet.\n"
-                    "4. **KYC & Legal Enforcement**: All travelers complete government passport/ID KYC verification. Fraudulent travelers face permanent account bans and immediate law enforcement reporting."
-                ),
-                "intent": "TRUST_AND_SAFETY",
-                "actions": [QUICK_NAV_ACTIONS["trust"], QUICK_NAV_ACTIONS["wallet"], QUICK_NAV_ACTIONS["support"]],
-                "timestamp": "Just now",
-                "is_fallback": True
-            }
-
-        # Traveller Identity Verification Sub-Intent
-        if any(k in query_lower for k in ['verify', 'verification', 'kyc', 'how do you verify', 'passport', 'genuine']):
-            return {
-                "text": (
-                    "🛡️ **FlyoraGo Traveller Verification Process:**\n\n"
-                    "Every traveler on FlyoraGo must pass mandatory identity & safety checks before accepting packages:\n\n"
-                    "1. **Government Passport & ID KYC**: Verified national identification and passport records.\n"
-                    "2. **Flight Ticket Verification**: Travelers submit verified flight booking PNR and ticket confirmation.\n"
-                    "3. **Public Ratings & Reviews**: Senders can review transparent past delivery history, ratings, and member trust scores.\n"
-                    "4. **Physical Handover Inspection**: Pre-flight item photo inspection required before luggage acceptance."
-                ),
-                "intent": "TRUST_AND_SAFETY",
-                "actions": [QUICK_NAV_ACTIONS["kyc"], QUICK_NAV_ACTIONS["trust"]],
-                "timestamp": "Just now",
-                "is_fallback": True
-            }
-
-        # General Trust & Safety Response
         return {
             "text": (
-                "🛡️ **FlyoraGo Trust, Safety & Anti-Fraud Security System:**\n\n"
-                "FlyoraGo builds trust through multiple security layers:\n\n"
-                "1. **Mandatory Passport & KYC Verification**: Travellers are verified through mandatory government ID, passport, and flight ticket checks.\n"
-                "2. **100% Protected Escrow Vault**: Payments are locked in the FlyoraGo Escrow Vault. Funds are released ONLY after successful delivery confirmation.\n"
-                "3. **6-Digit Cryptographic OTP Confirmation**: Payouts require the recipient's secret 6-digit OTP code at physical handover.\n"
-                "4. **Transparent Member Profiles & Reviews**: Both users can view verified profiles, ratings, and transaction history.\n"
-                "5. **Dispute Resolution & Full Refund**: If any issue occurs or delivery fails, click 'Raise Dispute' to lock funds and receive a 100% full refund."
+                "🛡️ **FlyoraGo Multi-Layer Trust, Safety & Fraud Protection Architecture:**\n\n"
+                "FlyoraGo provides bulletproof security for senders and travelers through 5 integrated security layers:\n\n"
+                "1. **Mandatory Passport & ID KYC**: Every traveler must submit government passport and national ID verification before accepting luggage requests.\n"
+                "2. **100% Protected Escrow Vault**: Shipping rewards are locked securely in the Escrow Vault and are NEVER paid to travelers upfront.\n"
+                "3. **6-Digit Cryptographic OTP Handover**: Funds are released ONLY when the recipient enters the secret 6-digit OTP code at physical delivery.\n"
+                "4. **Transparent Member Ratings & Reviews**: Users can inspect verified past transaction history, ratings, and member trust scores.\n"
+                "5. **Dispute Resolution & 100% Refund Guarantee**: If a traveler vanishes, delays delivery, or fails verification, click 'Raise Dispute' to lock funds instantly and receive a 100% full refund to your wallet while permanently banning the violator."
             ),
             "intent": "TRUST_AND_SAFETY",
             "actions": [QUICK_NAV_ACTIONS["trust"], QUICK_NAV_ACTIONS["kyc"], QUICK_NAV_ACTIONS["wallet"]],
-            "timestamp": "Just now",
-            "is_fallback": True
+            "timestamp": "Just now"
         }
 
     # 6. INTENT: Payments, Escrow & Refund Rules
     if any(k in query_lower for k in ['payment', 'escrow', 'wallet', 'withdraw', 'refund', 'cancellation', 'money']):
         return {
             "text": (
-                "💳 **Payment & Escrow Protection:**\n\n"
-                "• **Escrow Vault**: Holds funds securely upon booking acceptance.\n"
-                "• **Instant Release**: Released to traveler wallet upon valid 6-Digit OTP entry.\n"
-                "• **100% Refund**: Senders get a full refund if a trip is cancelled or traveler fails verification."
+                "💳 **FlyoraGo 100% Escrow Vault & Refund Guarantee:**\n\n"
+                "• **100% Escrow Protection**: All payments are held in the secure FlyoraGo Escrow Vault upon booking.\n"
+                "• **Instant Release**: Payout releases to the traveler wallet immediately upon recipient 6-digit OTP entry.\n"
+                "• **100% Money-Back Refund**: Senders get a full refund if a trip is cancelled, delayed, or traveler fails physical verification."
             ),
             "actions": [QUICK_NAV_ACTIONS["wallet"]],
             "timestamp": "Just now"
@@ -453,11 +386,11 @@ def classify_intent_and_respond(prompt_text: str, user_context: dict = None, his
     if any(k in query_lower for k in ['dispute', 'damage', 'missing', 'late', 'complaint', 'claim', 'support', 'help']):
         return {
             "text": (
-                "⚠️ **Dispute Resolution & Customer Support:**\n\n"
+                "⚠️ **Dispute Resolution & Customer Protection:**\n\n"
                 "If a parcel is damaged, delayed, or unverified:\n"
-                "1. **Raise Dispute**: Click 'Raise Dispute' before sharing the OTP code.\n"
-                "2. **Freeze Escrow**: Funds are locked immediately during investigation.\n"
-                "3. **Admin Review**: Support team inspects handover photos, weight receipts, and chat logs."
+                "1. **Raise Dispute**: Click 'Raise Dispute' in your booking dashboard before sharing the OTP code.\n"
+                "2. **Freeze Escrow**: Funds are locked instantly in Escrow during investigation.\n"
+                "3. **Admin Investigation**: Support team inspects handover photos, luggage weight receipts, and chat logs to issue a 100% refund."
             ),
             "actions": [QUICK_NAV_ACTIONS["support"]],
             "timestamp": "Just now"

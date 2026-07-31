@@ -558,8 +558,8 @@ class AdminDashboardOverviewView(views.APIView):
                 })
 
         # 3. Trips, Bookings, Shipments, Users
-        trips_qs = Trip.objects.all().select_related('user', 'user__profile').annotate(bookings_count_annotated=Count('bookings')).order_by('-created_at')[:100]
-        bookings_qs = Booking.objects.all().select_related('sender', 'sender__profile', 'traveler', 'traveler__profile', 'trip').order_by('-created_at')[:100]
+        trips_qs = Trip.objects.all().select_related('user').annotate(bookings_count_annotated=Count('bookings')).order_by('-created_at')[:100]
+        bookings_qs = Booking.objects.all().select_related('sender', 'traveler', 'trip').order_by('-created_at')[:100]
         shipments_qs = Shipment.objects.all().select_related('booking', 'booking__sender', 'booking__traveler', 'booking__trip').order_by('-created_at')[:100]
 
         trips_data = TripSerializer(trips_qs, many=True).data
@@ -689,19 +689,23 @@ class SenderDashboardOverviewView(views.APIView):
         from notifications.models import Notification
 
         user = request.user
-        sender_trips_qs = Trip.objects.filter(user=user).select_related('user', 'user__profile').order_by('-created_at')
-        bookings_qs = Booking.objects.filter(Q(sender=user) | Q(traveler=user)).select_related('sender', 'sender__profile', 'traveler', 'traveler__profile', 'trip').order_by('-created_at')
-        available_travelers_qs = Trip.objects.filter(status='Active').exclude(airline='SENDER_REQUEST').select_related('user', 'user__profile').order_by('-created_at')[:50]
-        notifs_qs = Notification.objects.filter(user=user).order_by('-created_at')[:30]
-
-        notif_list = [{
-            'id': n.id,
-            'title': n.title,
-            'message': n.message,
-            'is_read': n.is_read,
-            'created_at': n.created_at.isoformat(),
-            'type': getattr(n, 'type', 'general')
-        } for n in notifs_qs]
+        sender_trips_qs = Trip.objects.filter(user=user).select_related('user').order_by('-created_at')
+        bookings_qs = Booking.objects.filter(Q(sender=user) | Q(traveler=user)).select_related('sender', 'traveler', 'trip').order_by('-created_at')
+        available_travelers_qs = Trip.objects.filter(status='Active').exclude(airline='SENDER_REQUEST').select_related('user').order_by('-created_at')[:50]
+        
+        notif_list = []
+        try:
+            notifs_qs = Notification.objects.filter(user=user).order_by('-created_at')[:30]
+            notif_list = [{
+                'id': n.id,
+                'title': n.title,
+                'message': n.message,
+                'is_read': n.is_read,
+                'created_at': n.created_at.isoformat(),
+                'type': getattr(n, 'type', 'general')
+            } for n in notifs_qs]
+        except Exception:
+            pass
 
         return success_response(
             data={
@@ -733,19 +737,23 @@ class TravelerDashboardOverviewView(views.APIView):
         from bookings.serializers import BookingSerializer
         from notifications.models import Notification
         user = request.user
-        traveler_trips_qs = Trip.objects.filter(user=user).exclude(airline='SENDER_REQUEST').select_related('user', 'user__profile').order_by('-created_at')
-        bookings_qs = Booking.objects.filter(Q(traveler=user) | Q(sender=user)).select_related('sender', 'sender__profile', 'traveler', 'traveler__profile', 'trip').order_by('-created_at')
-        available_senders_qs = Trip.objects.filter(airline='SENDER_REQUEST', status='Active').select_related('user', 'user__profile').order_by('-created_at')[:50]
-        notifs_qs = Notification.objects.filter(user=user).order_by('-created_at')[:30]
-
-        notif_list = [{
-            'id': n.id,
-            'title': n.title,
-            'message': n.message,
-            'is_read': n.is_read,
-            'created_at': n.created_at.isoformat(),
-            'type': getattr(n, 'type', 'general')
-        } for n in notifs_qs]
+        traveler_trips_qs = Trip.objects.filter(user=user).exclude(airline='SENDER_REQUEST').select_related('user').order_by('-created_at')
+        bookings_qs = Booking.objects.filter(Q(traveler=user) | Q(sender=user)).select_related('sender', 'traveler', 'trip').order_by('-created_at')
+        available_senders_qs = Trip.objects.filter(airline='SENDER_REQUEST', status='Active').select_related('user').order_by('-created_at')[:50]
+        
+        notif_list = []
+        try:
+            notifs_qs = Notification.objects.filter(user=user).order_by('-created_at')[:30]
+            notif_list = [{
+                'id': n.id,
+                'title': n.title,
+                'message': n.message,
+                'is_read': n.is_read,
+                'created_at': n.created_at.isoformat(),
+                'type': getattr(n, 'type', 'general')
+            } for n in notifs_qs]
+        except Exception:
+            pass
 
         return success_response(
             data={
@@ -778,8 +786,8 @@ class UserDashboardOverviewView(views.APIView):
         from notifications.models import Notification
 
         user = request.user
-        trips_qs = Trip.objects.filter(user=user).select_related('user', 'user__profile').order_by('-created_at')
-        bookings_qs = Booking.objects.filter(Q(sender=user) | Q(traveler=user)).select_related('sender', 'sender__profile', 'traveler', 'traveler__profile', 'trip').order_by('-created_at')
+        trips_qs = Trip.objects.filter(user=user).select_related('user').order_by('-created_at')
+        bookings_qs = Booking.objects.filter(Q(sender=user) | Q(traveler=user)).select_related('sender', 'traveler', 'trip').order_by('-created_at')
         
         trust_data = {'score': 550, 'level': 'STANDARD', 'activity_logs': []}
         try:

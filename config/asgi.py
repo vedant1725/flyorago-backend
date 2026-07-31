@@ -5,10 +5,20 @@ from django.core.asgi import get_asgi_application
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
+# Auto-migrate database on ASGI startup
+try:
+    print("=" * 60)
+    print("RUNNING AUTOMATIC MIGRATIONS ON ASGI STARTUP...")
+    from django.core.management import call_command
+    call_command('migrate', interactive=False)
+    print("AUTOMATIC ASGI MIGRATIONS SUCCESSFUL!")
+    print("=" * 60)
+except Exception as e:
+    print(f"AUTOMATIC ASGI MIGRATIONS FAILED: {e}")
+
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 
-# Collect routing patterns dynamically from apps
 websocket_urlpatterns = []
 
 try:

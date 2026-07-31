@@ -117,7 +117,6 @@ class AdminStatsView(views.APIView):
         now = timezone.now()
         week_ago = now - timedelta(days=7)
 
-<<<<<<< HEAD
         # Single-pass SQL aggregation queries (100x faster than 18 individual queries)
         user_agg = User.objects.aggregate(
             total=Count('id'),
@@ -125,21 +124,21 @@ class AdminStatsView(views.APIView):
         )
         trip_agg = Trip.objects.aggregate(
             total=Count('id'),
-            active=Count('id', filter=Q(status='Active')),
-            completed=Count('id', filter=Q(status='Completed')),
-            cancelled=Count('id', filter=Q(status='Cancelled'))
+            active=Count('id', filter=Q(status__in=['Active', 'ACTIVE', 'Active Trip'])),
+            completed=Count('id', filter=Q(status__in=['Completed', 'COMPLETED', 'PAYMENT_RELEASED'])),
+            cancelled=Count('id', filter=Q(status__in=['Cancelled', 'CANCELLED']))
         )
         booking_agg = Booking.objects.aggregate(
             total=Count('id'),
             new_week=Count('id', filter=Q(created_at__gte=week_ago)),
-            pending=Count('id', filter=Q(status='Pending')),
-            confirmed=Count('id', filter=Q(status='Confirmed')),
-            completed=Count('id', filter=Q(status='Completed')),
-            cancelled=Count('id', filter=Q(status='Cancelled'))
+            pending=Count('id', filter=Q(status__in=['REQUEST_CREATED', 'REQUEST_SENT', 'Waiting Traveller', 'Draft', 'Pending', 'Booking Requested'])),
+            confirmed=Count('id', filter=Q(status__in=['ACCEPTED', 'PAID', 'PARCEL_VERIFIED', 'Traveller Accepted', 'Confirmed', 'Payment Completed', 'Ready For Transit'])),
+            completed=Count('id', filter=Q(status__in=['DELIVERED', 'PAYMENT_RELEASED', 'Completed'])),
+            cancelled=Count('id', filter=Q(status__in=['REJECTED', 'CANCELLED', 'Cancelled', 'Rejected']))
         )
         shipment_agg = Shipment.objects.aggregate(
             total=Count('id'),
-            in_transit=Count('id', filter=Q(status='In Transit'))
+            in_transit=Count('id', filter=Q(status__in=['In Transit', 'IN_TRANSIT', 'Out for Handoff']))
         )
         kyc_agg = Profile.objects.aggregate(
             pending=Count('id', filter=Q(kyc_status='PENDING')),
@@ -147,26 +146,6 @@ class AdminStatsView(views.APIView):
             rejected=Count('id', filter=Q(kyc_status='REJECTED')),
             not_submitted=Count('id', filter=Q(kyc_status='NOT_SUBMITTED'))
         )
-=======
-        total_users = User.objects.count()
-        new_users_week = User.objects.filter(date_joined__gte=week_ago).count()
-<<<<<<< HEAD
-        active_trips = Trip.objects.filter(status__in=['Active', 'ACTIVE', 'Active Trip']).count()
-=======
-        active_trips = Trip.objects.filter(status='Active').count()
->>>>>>> b6aebf3ac52853fc37c85b070110a3846fe198e2
-        total_trips = Trip.objects.count()
-        parcel_requests = Booking.objects.count()
-        new_bookings_week = Booking.objects.filter(created_at__gte=week_ago).count()
-        total_shipments = Shipment.objects.count()
-<<<<<<< HEAD
-        in_transit = Shipment.objects.filter(status__in=['In Transit', 'IN_TRANSIT', 'Out for Handoff']).count()
-=======
-        in_transit = Shipment.objects.filter(status='In Transit').count()
->>>>>>> b6aebf3ac52853fc37c85b070110a3846fe198e2
-        pending_kyc = Profile.objects.filter(kyc_status='PENDING').count()
-        approved_kyc = Profile.objects.filter(kyc_status='APPROVED').count()
->>>>>>> origin/main
 
         role_counts = {}
         for u in User.objects.values('role').annotate(count=Count('id')):
@@ -190,7 +169,6 @@ class AdminStatsView(views.APIView):
                 'not_submitted': kyc_agg['not_submitted'] or 0,
             },
             'tripBreakdown': {
-<<<<<<< HEAD
                 'active': trip_agg['active'] or 0,
                 'completed': trip_agg['completed'] or 0,
                 'cancelled': trip_agg['cancelled'] or 0,
@@ -200,28 +178,6 @@ class AdminStatsView(views.APIView):
                 'confirmed': booking_agg['confirmed'] or 0,
                 'completed': booking_agg['completed'] or 0,
                 'cancelled': booking_agg['cancelled'] or 0,
-=======
-                'active': active_trips,
-<<<<<<< HEAD
-                'completed': Trip.objects.filter(status__in=['Completed', 'COMPLETED', 'PAYMENT_RELEASED']).count(),
-                'cancelled': Trip.objects.filter(status__in=['Cancelled', 'CANCELLED']).count(),
-            },
-            'bookingBreakdown': {
-                'pending': Booking.objects.filter(status__in=['REQUEST_CREATED', 'REQUEST_SENT', 'Waiting Traveller', 'Draft', 'Pending', 'Booking Requested']).count(),
-                'confirmed': Booking.objects.filter(status__in=['ACCEPTED', 'PAID', 'PARCEL_VERIFIED', 'Traveller Accepted', 'Confirmed', 'Payment Completed', 'Ready For Transit']).count(),
-                'completed': Booking.objects.filter(status__in=['DELIVERED', 'PAYMENT_RELEASED', 'Completed']).count(),
-                'cancelled': Booking.objects.filter(status__in=['REJECTED', 'CANCELLED', 'Cancelled', 'Rejected']).count(),
-=======
-                'completed': Trip.objects.filter(status='Completed').count(),
-                'cancelled': Trip.objects.filter(status='Cancelled').count(),
-            },
-            'bookingBreakdown': {
-                'pending': Booking.objects.filter(status='Pending').count(),
-                'confirmed': Booking.objects.filter(status='Confirmed').count(),
-                'completed': Booking.objects.filter(status='Completed').count(),
-                'cancelled': Booking.objects.filter(status='Cancelled').count(),
->>>>>>> b6aebf3ac52853fc37c85b070110a3846fe198e2
->>>>>>> origin/main
             },
             'userRoles': role_counts,
         }, message='Admin stats fetched')

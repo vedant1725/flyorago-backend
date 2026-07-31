@@ -56,7 +56,7 @@ class Dispute(models.Model):
         ('Resolved', 'Resolved'),
         ('Closed', 'Closed'),
     )
-    
+
     booking = models.ForeignKey('bookings.Booking', on_delete=models.CASCADE, related_name='disputes')
     raised_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='raised_disputes')
     reason = models.CharField(max_length=255)
@@ -79,3 +79,27 @@ class DisputeImage(models.Model):
 
     def __str__(self):
         return f"Image for Dispute #{self.dispute.id}"
+
+class ContactMessage(models.Model):
+    STATUS_CHOICES = (
+        ('New', 'New'),
+        ('Read', 'Read'),
+        ('Replied', 'Replied'),
+        ('Resolved', 'Resolved'),
+    )
+
+    full_name = models.CharField(max_length=150)
+    email = models.EmailField()
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    user_type = models.CharField(max_length=50, default='traveler')
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='New')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"ContactMessage from {self.full_name} ({self.email}) - {self.subject}"

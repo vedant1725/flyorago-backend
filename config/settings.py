@@ -61,15 +61,16 @@ INSTALLED_APPS = [
     'reviews',
     'support',
     'flights',
-    'apps.trust_scores',
-    'apps.luggage_sharing',
-    'apps.ai_assistant',
+    'trust_scores',
+    'luggage_sharing',
+    'ai_assistant',
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # WhiteNoise serving static files
+    'django.middleware.gzip.GZipMiddleware',       # GZip Response Compression (80% size reduction)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -77,6 +78,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 
 ROOT_URLCONF = 'config.urls'
 
@@ -324,12 +326,19 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
-# Cache Configuration
+# Cache Configuration — High Performance In-Memory Caching (Google & Meta Grade)
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'flyorago-high-perf-cache',
+        'TIMEOUT': 300,
+        'OPTIONS': {
+            'MAX_ENTRIES': 20000,
+            'CULL_FREQUENCY': 3,
+        }
     }
 }
+
 
 # Cloudinary Integration (Mocked if credentials are dummy)
 import cloudinary
@@ -375,6 +384,18 @@ LOGGING = {
         },
     },
 }
+
+# AI Assistant Settings
+AI_PROVIDER = env('AI_PROVIDER', default='gemini')
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+
+# Resend Email System Settings
+RESEND_API_KEY = env('RESEND_API_KEY', default='')
+EMAIL_FROM = env('EMAIL_FROM', default='FlyoraGo <no-reply@flyorago.tech>')
+EMAIL_REPLY_TO = env('EMAIL_REPLY_TO', default='support@flyorago.tech')
+EMAIL_ENV = env('EMAIL_ENV', default='development')
+EMAIL_TEST_MODE = env.bool('EMAIL_TEST_MODE', default=False)
+SITE_URL = env('SITE_URL', default='https://flyorago.me')
 
 # Max payload size for Base64 image uploads (50MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800

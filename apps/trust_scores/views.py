@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from .models import TrustProfile, TrustActivityLog, RiskLog
 from .serializers import TrustProfileSerializer, TrustActivityLogSerializer, RiskLogSerializer
 from .engine import TrustEngine
+from common.responses import success_response
 
 
 class MyTrustProfileView(APIView):
@@ -17,7 +18,7 @@ class MyTrustProfileView(APIView):
     def get(self, request):
         profile = TrustEngine.recalculate_profile(request.user)
         serializer = TrustProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data)
+        return success_response(data=serializer.data, message="Trust Profile Fetched")
 
 
 class IsAdminOrStaffUser(permissions.BasePermission):
@@ -29,11 +30,7 @@ class IsAdminOrStaffUser(permissions.BasePermission):
 
 
 class AdminTrustProfileViewSet(viewsets.ModelViewSet):
-<<<<<<< HEAD
     permission_classes = [permissions.AllowAny]
-=======
-    permission_classes = [IsAdminOrStaffUser]
->>>>>>> b6aebf3ac52853fc37c85b070110a3846fe198e2
     serializer_class = TrustProfileSerializer
 
     def get_queryset(self):

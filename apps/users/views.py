@@ -30,57 +30,70 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             print("LOGIN DEBUG - REQUEST DATA:", request.data)
             print("LOGIN DEBUG - REQUEST KEYS:", list(request.data.keys()))
 
-            serializer = self.get_serializer(data=request.data)
+            email = request.data.get('email', '').strip().lower()
 
+            # ── Step 1: Check if email exists ──────────────────────────────
             try:
-                serializer.is_valid(raise_exception=True)
-            except Exception as validation_err:
-                # Authentication failed (wrong email/password) or validation error
-                print("LOGIN DEBUG - VALIDATION EXCEPTION TYPE:", type(validation_err).__name__)
-                print("LOGIN DEBUG - VALIDATION EXCEPTION MSG:", str(validation_err))
+                diag_user = User.objects.filter(email__iexact=email).first()
+            except Exception as diag_err:
+                print(f"LOGIN DEBUG - Diagnostic query failed: {diag_err}")
+                diag_user = None
 
-                # Safe diagnostic: check if user exists
-                try:
-                    email = request.data.get('email', '')
-                    diag_user = User.objects.filter(email=email).first()
-                    if diag_user:
-                        pw_hash = diag_user.password or ''
-                        pw_prefix = pw_hash[:30] if pw_hash else 'EMPTY'
-                        is_hashed = pw_hash.startswith(('pbkdf2_', 'argon2', 'bcrypt'))
-                        print(f"LOGIN DEBUG - User '{email}' EXISTS, is_active={diag_user.is_active}, pw_prefix={pw_prefix}, hashed={is_hashed}")
-                    else:
-                        print(f"LOGIN DEBUG - User '{email}' DOES NOT EXIST in database")
-                except Exception as diag_err:
-                    print(f"LOGIN DEBUG - Diagnostic query failed: {diag_err}")
+            if not diag_user:
+                print(f"LOGIN DEBUG - User '{email}' DOES NOT EXIST in database")
+                return failure_response(
+                    errors={"error_code": "EMAIL_NOT_FOUND"},
+                    message="No account found with this email address. Please check your email or sign up."
+                )
 
-                # Safely get errors
-                try:
-                    errors = serializer.errors
-                except Exception:
-                    errors = {"detail": str(validation_err)}
+            # ── Step 2: Check if account is active (blocked by admin) ──────
+            if not diag_user.is_active:
+                print(f"LOGIN DEBUG - User '{email}' EXISTS but is BLOCKED (is_active=False)")
+                return failure_response(
+                    errors={"error_code": "ACCOUNT_BLOCKED"},
+                    message="Your account has been suspended by an administrator. Please contact support."
+                )
 
-                return failure_response(errors=errors, message="Authentication failed")
+            # ── Step 3: Password Verification ──────────────────────────────
+            password = request.data.get('password', '')
+            if not diag_user.check_password(password):
+                print(f"LOGIN DEBUG - User '{email}' EXISTS but password check FAILED.")
+                return failure_response(
+                    errors={"error_code": "WRONG_PASSWORD"},
+                    message="Incorrect password. Please try again.",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
 
-            # is_valid() succeeded — build response
+            # ── Step 4: Generate JWT Tokens & Build Response ──────────────
             try:
-                user = User.objects.filter(email=request.data.get('email')).first()
+                from rest_framework_simplejwt.tokens import RefreshToken
+                refresh = RefreshToken.for_user(diag_user)
+                refresh['role'] = getattr(diag_user, 'role', 'user')
+                refresh['email'] = diag_user.email
+                refresh['is_verified'] = getattr(diag_user, 'is_verified', True)
+
+                tokens = {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                }
+
                 user_dict = {}
-                if user:
-                    try:
-                        user_dict = dict(UserSerializer(user).data)
-                    except Exception as ser_err:
-                        print(f"LOGIN DEBUG - UserSerializer crashed: {ser_err}")
-                        user_dict = {'email': user.email}
-                    user_dict['userId'] = str(user.id)
-                    user_dict['fullName'] = f"{user.first_name} {user.last_name}".strip() or user.email.split('@')[0]
+                try:
+                    user_dict = dict(UserSerializer(diag_user).data)
+                except Exception as ser_err:
+                    print(f"LOGIN DEBUG - UserSerializer note: {ser_err}")
+                    user_dict = {'email': diag_user.email}
+
+                user_dict['userId'] = str(diag_user.id)
+                user_dict['fullName'] = f"{diag_user.first_name} {diag_user.last_name}".strip() or diag_user.email.split('@')[0]
 
                 data = {
-                    'tokens': serializer.validated_data,
+                    'tokens': tokens,
                     'user': user_dict,
-                    'userId': str(user.id) if user else "",
-                    'fullName': (f"{user.first_name} {user.last_name}".strip() or user.email.split('@')[0]) if user else ""
+                    'userId': str(diag_user.id),
+                    'fullName': user_dict['fullName']
                 }
-                print("LOGIN DEBUG - SUCCESS for:", request.data.get('email'))
+                print("LOGIN DEBUG - SUCCESS for:", diag_user.email)
                 return success_response(data=data, message="Login successful")
             except Exception as response_err:
                 tb = traceback.format_exc()
@@ -134,7 +147,16 @@ class UserRegisterView(views.APIView):
                 user.otp_expires_at = timezone.now() + timedelta(minutes=10)
                 user.save()
 
+                # Trigger non-blocking email notifications
+                try:
+                    from notifications.email_service import EmailService
+                    EmailService.send_welcome(user)
+                    EmailService.send_verification_otp(user, otp)
+                except Exception as email_err:
+                    pass
+
                 user_dict = dict(UserSerializer(user).data)
+
                 # In a real system, send email/sms here.
                 # We add otp inside success response for easier mock testing/UI integration.
                 user_dict['test_otp'] = otp
@@ -170,7 +192,15 @@ class RequestOTPView(views.APIView):
                 user.otp_code = otp
                 user.otp_expires_at = timezone.now() + timedelta(minutes=10)
                 user.save()
+
+                try:
+                    from notifications.email_service import EmailService
+                    EmailService.send_verification_otp(user, otp)
+                except Exception as email_err:
+                    pass
+
                 return success_response(data={'test_otp': otp}, message="OTP generated successfully")
+
             return failure_response(message="User not found", status_code=status.HTTP_404_NOT_FOUND)
         return failure_response(errors=serializer.errors, message="Invalid request data")
 

@@ -40,8 +40,20 @@ class Trip(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if self.accepted_parcel_types:
+            if isinstance(self.accepted_parcel_types, list):
+                self.accepted_parcel_types = [
+                    t if (isinstance(t, str) and not t.startswith('data:image') and len(t) < 300) else '📦 Parcel Item'
+                    for t in self.accepted_parcel_types
+                ]
+            elif isinstance(self.accepted_parcel_types, str) and (self.accepted_parcel_types.startswith('data:image') or len(self.accepted_parcel_types) > 300):
+                self.accepted_parcel_types = ['📦 Parcel Item']
+        super().save(*args, **kwargs)
+
     class Meta:
         indexes = [
+            models.Index(fields=['user']),
             models.Index(fields=['from_location', 'to_location']),
             models.Index(fields=['departure_date']),
             models.Index(fields=['status']),

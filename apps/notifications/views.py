@@ -40,3 +40,28 @@ class NotificationMarkReadSingleView(views.APIView):
         notif.save()
         return success_response(message="Notification marked as read")
 
+
+class AdminEmailActivityView(views.APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from .models import EmailLog
+        logs = EmailLog.objects.all().order_by('-created_at')[:200]
+        data = []
+        for l in logs:
+            data.append({
+                'id': l.id,
+                'recipient': l.recipient,
+                'template': l.template,
+                'subject': l.subject,
+                'event': l.event,
+                'provider': l.provider,
+                'status': l.status,
+                'messageId': l.message_id or '',
+                'createdAt': l.created_at.isoformat() if l.created_at else None,
+                'sentAt': l.sent_at.isoformat() if l.sent_at else None,
+                'error': l.error or ''
+            })
+        return success_response(data=data, message="Email activity retrieved successfully")
+
+

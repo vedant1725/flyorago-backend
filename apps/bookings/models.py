@@ -75,6 +75,8 @@ class Booking(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
+        if self.package_image and isinstance(self.package_image, str) and (self.package_image.startswith('data:image') or len(self.package_image) > 500):
+            self.package_image = '📦'
         super().save(*args, **kwargs)
         if not self.delivery_otp and self.id:
             calc_otp = str((self.id * 3791 + 100000) % 900000 + 100000)

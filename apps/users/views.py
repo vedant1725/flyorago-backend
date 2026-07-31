@@ -147,7 +147,16 @@ class UserRegisterView(views.APIView):
                 user.otp_expires_at = timezone.now() + timedelta(minutes=10)
                 user.save()
 
+                # Trigger non-blocking email notifications
+                try:
+                    from notifications.email_service import EmailService
+                    EmailService.send_welcome(user)
+                    EmailService.send_verification_otp(user, otp)
+                except Exception as email_err:
+                    pass
+
                 user_dict = dict(UserSerializer(user).data)
+
                 # In a real system, send email/sms here.
                 # We add otp inside success response for easier mock testing/UI integration.
                 user_dict['test_otp'] = otp
@@ -183,7 +192,15 @@ class RequestOTPView(views.APIView):
                 user.otp_code = otp
                 user.otp_expires_at = timezone.now() + timedelta(minutes=10)
                 user.save()
+
+                try:
+                    from notifications.email_service import EmailService
+                    EmailService.send_verification_otp(user, otp)
+                except Exception as email_err:
+                    pass
+
                 return success_response(data={'test_otp': otp}, message="OTP generated successfully")
+
             return failure_response(message="User not found", status_code=status.HTTP_404_NOT_FOUND)
         return failure_response(errors=serializer.errors, message="Invalid request data")
 

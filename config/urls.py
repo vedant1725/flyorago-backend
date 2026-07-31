@@ -9,7 +9,10 @@ from common.admin_views import (
     AdminTripsListView, AdminBookingsListView, AdminShipmentsListView, AdminUsersListView,
     AdminTripActionView, AdminBookingActionView, AdminShipmentActionView, AdminUserActionView,
     AdminChangeCredentialsView,
+    AdminDashboardOverviewView, SenderDashboardOverviewView, TravelerDashboardOverviewView, UserDashboardOverviewView
 )
+
+from notifications.views import AdminEmailActivityView
 
 urlpatterns = [
     path('', api_root, name='api_root'),
@@ -20,6 +23,12 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
+    # ── Consolidated High-Performance Overview Endpoints ──
+    path('api/admin/dashboard-overview/', AdminDashboardOverviewView.as_view(), name='admin_dashboard_overview'),
+    path('api/sender/dashboard-overview/', SenderDashboardOverviewView.as_view(), name='sender_dashboard_overview'),
+    path('api/traveler/dashboard-overview/', TravelerDashboardOverviewView.as_view(), name='traveler_dashboard_overview'),
+    path('api/user/dashboard-overview/', UserDashboardOverviewView.as_view(), name='user_dashboard_overview'),
+
     # ── Admin Panel: Stats & Lists & Chart ──
     path('api/admin/stats/', AdminStatsView.as_view(), name='admin_stats'),
     path('api/admin/chart/', AdminChartDataView.as_view(), name='admin_chart'),
@@ -28,6 +37,8 @@ urlpatterns = [
     path('api/admin/shipments/', AdminShipmentsListView.as_view(), name='admin_shipments'),
     path('api/admin/users/', AdminUsersListView.as_view(), name='admin_users'),
     path('api/admin/change-credentials/', AdminChangeCredentialsView.as_view(), name='admin_change_credentials'),
+    path('api/admin/email-activity/', AdminEmailActivityView.as_view(), name='admin_email_activity'),
+
 
     # ── Admin Panel: CRUD Actions ──
     path('api/admin/trips/<int:pk>/', AdminTripActionView.as_view(), name='admin_trip_action'),
@@ -56,9 +67,9 @@ urlpatterns = [
     path('api/reviews/', include('reviews.urls')),
     path('api/support/', include('support.urls')),
     path('api/flights/', include('flights.urls')),
-    path('api/trust/', include('apps.trust_scores.urls')),
-    path('api/luggage/', include('apps.luggage_sharing.urls')),
-    path('api/ai/', include('apps.ai_assistant.urls')),
+    path('api/trust/', include('trust_scores.urls')),
+    path('api/luggage/', include('luggage_sharing.urls')),
+    path('api/ai/', include('ai_assistant.urls')),
 
     # Matching Engine
     path('api/matches/find-travellers/<int:shipment_id>/', MatchTravellerListView.as_view(), name='match_travellers_root'),

@@ -7,6 +7,9 @@ from .serializers import TrustProfileSerializer, TrustActivityLogSerializer, Ris
 from .engine import TrustEngine
 
 
+from common.responses import success_response
+
+
 class MyTrustProfileView(APIView):
     """
     GET /api/trust/profile/
@@ -17,7 +20,7 @@ class MyTrustProfileView(APIView):
     def get(self, request):
         profile = TrustEngine.recalculate_profile(request.user)
         serializer = TrustProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data)
+        return success_response(data=serializer.data, message="Trust Profile Fetched")
 
 
 class IsAdminOrStaffUser(permissions.BasePermission):

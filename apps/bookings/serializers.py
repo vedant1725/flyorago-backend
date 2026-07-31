@@ -39,37 +39,26 @@ class BookingSerializer(serializers.ModelSerializer):
             return '123456'
 
     def get_accepted_parcel_types(self, obj) -> list:
-        import json
-        if obj.package_image:
-            try:
-                parsed = json.loads(obj.package_image)
-                if isinstance(parsed, list) and len(parsed) > 0:
-                    return parsed
-            except Exception:
-                pass
-            if isinstance(obj.package_image, str) and len(obj.package_image) > 30:
+        if obj.trip and hasattr(obj.trip, 'accepted_parcel_types') and obj.trip.accepted_parcel_types:
+            types = obj.trip.accepted_parcel_types
+            if isinstance(types, list):
+                return [t if (isinstance(t, str) and not t.startswith('data:image') and len(t) < 300) else '📦 Parcel Item' for t in types]
+            return ['📦 Parcel Item']
+
+        if obj.package_image and isinstance(obj.package_image, str):
+            if not obj.package_image.startswith('data:image') and len(obj.package_image) < 300:
                 return [obj.package_image]
 
-        # Look up Sender's SENDER_REQUEST trip for uploaded images
-        if obj.sender:
-            try:
-                sender_trips = Trip.objects.filter(user=obj.sender, airline='SENDER_REQUEST').order_by('-created_at')
-                for st in sender_trips:
-                    if st.accepted_parcel_types and isinstance(st.accepted_parcel_types, list) and len(st.accepted_parcel_types) > 0:
-                        return st.accepted_parcel_types
-            except Exception:
-                pass
-
-        if obj.trip and hasattr(obj.trip, 'accepted_parcel_types') and obj.trip.accepted_parcel_types:
-            return obj.trip.accepted_parcel_types
-
-        return []
+        return ['General Items']
 
     def get_package(self, obj) -> dict:
+        img = obj.package_image or '📦'
+        if isinstance(img, str) and (img.startswith('data:image') or len(img) > 500):
+            img = '📦'
         return {
             'name': obj.package_name,
             'category': obj.package_category,
-            'image': obj.package_image or '📦'
+            'image': img
         }
 
     def get_route(self, obj) -> dict:
@@ -83,8 +72,11 @@ class BookingSerializer(serializers.ModelSerializer):
         return {'from': 'Unknown', 'to': 'Unknown', 'fromAirport': '', 'toAirport': ''}
 
     def get_sender(self, obj) -> dict:
-        from profiles.models import Profile
-        profile = Profile.objects.filter(user=obj.sender).first()
+        if not obj.sender:
+            return {'id': '', 'name': 'Unknown', 'email': '', 'phone': '', 'kyc_status': 'NOT_SUBMITTED', 'is_kyc_verified': False, 'city': 'Sender'}
+        
+        # Use prefetched profile or safe lookup
+        profile = getattr(obj.sender, 'profile', None)
         kyc_status = profile.kyc_status if profile else 'NOT_SUBMITTED'
         return {
             'id': str(obj.sender.id),
@@ -95,6 +87,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'is_kyc_verified': kyc_status == 'APPROVED',
             'city': 'Sender'
         }
+
 
     def get_traveler(self, obj) -> dict:
         return {

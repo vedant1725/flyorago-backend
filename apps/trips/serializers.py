@@ -19,8 +19,24 @@ class TripSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'created_at', 'available_weight')
 
+    accepted_parcel_types = serializers.SerializerMethodField()
+
+    def get_accepted_parcel_types(self, obj) -> list:
+        raw = getattr(obj, 'accepted_parcel_types', None)
+        if not raw:
+            return []
+        if isinstance(raw, list):
+            return [
+                t if (isinstance(t, str) and not t.startswith('data:image') and len(t) < 300) else '📦 Parcel Item'
+                for t in raw
+            ]
+        if isinstance(raw, str) and not raw.startswith('data:image') and len(raw) < 300:
+            return [raw]
+        return ['📦 Parcel Item']
+
     def get_bookings_count(self, obj) -> int:
-        # We will retrieve booking count associated with this trip's route/user
+        if hasattr(obj, 'bookings_count_annotated'):
+            return obj.bookings_count_annotated
         return obj.bookings.count() if hasattr(obj, 'bookings') else 0
 
     def get_progress(self, obj) -> int:

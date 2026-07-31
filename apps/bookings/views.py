@@ -24,8 +24,12 @@ class BookingListCreateView(generics.ListCreateAPIView):
         return BookingSerializer
 
     def get_queryset(self):
-        # Retrieve bookings where active user is sender OR traveler
-        queryset = Booking.objects.all().select_related('sender', 'traveler', 'trip')
+        # Retrieve bookings where active user is sender OR traveler with prefetched user profiles
+        queryset = Booking.objects.all().select_related(
+            'sender', 'sender__profile', 
+            'traveler', 'traveler__profile', 
+            'trip'
+        )
         
         user_only = self.request.query_params.get('user_only', 'true').lower() == 'true'
         admin_all = self.request.query_params.get('admin_all', 'false').lower() == 'true'

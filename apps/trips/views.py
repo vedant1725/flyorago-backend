@@ -14,7 +14,8 @@ class TripListCreateView(generics.ListCreateAPIView):
         return TripSerializer
 
     def get_queryset(self):
-        queryset = Trip.objects.all().select_related('user')
+        from django.db.models import Count
+        queryset = Trip.objects.all().select_related('user', 'user__profile').annotate(bookings_count_annotated=Count('bookings'))
         
         # Filter for admin overview, user only, or active sender searches
         admin_all = self.request.query_params.get('admin_all', 'false').lower() == 'true'

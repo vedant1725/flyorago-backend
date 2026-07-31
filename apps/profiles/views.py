@@ -120,6 +120,7 @@ class KYCSubmitView(views.APIView):
         except Exception:
             return failure_response(message="Invalid User ID format", status_code=status.HTTP_400_BAD_REQUEST)
 
+<<<<<<< HEAD
         profile, created = Profile.objects.get_or_create(user=user)
         
         profile.kyc_document_type = request.data.get('documentType', 'national_id_and_passport')
@@ -136,6 +137,23 @@ class KYCSubmitView(views.APIView):
             pass
 
         return success_response(message="All mandatory KYC documents submitted successfully!")
+=======
+        try:
+            profile, created = Profile.objects.get_or_create(user=user)
+            
+            profile.kyc_document_type = request.data.get('documentType', 'national_id_and_passport')
+            profile.kyc_document_front = request.data.get('frontImage')
+            profile.kyc_document_back = request.data.get('backImage')
+            if hasattr(profile, 'kyc_passport'):
+                profile.kyc_passport = request.data.get('passportImage')
+            profile.kyc_selfie = request.data.get('selfieImage')
+            profile.kyc_status = 'PENDING'
+            profile.save()
+
+            return success_response(message="All mandatory KYC documents submitted successfully!")
+        except Exception as e:
+            return failure_response(message=f"Failed to submit KYC: {str(e)}", status_code=status.HTTP_400_BAD_REQUEST)
+>>>>>>> origin/main
 
 
 class KYCAdminListView(views.APIView):

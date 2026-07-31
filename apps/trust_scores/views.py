@@ -5,8 +5,6 @@ from rest_framework.views import APIView
 from .models import TrustProfile, TrustActivityLog, RiskLog
 from .serializers import TrustProfileSerializer, TrustActivityLogSerializer, RiskLogSerializer
 from .engine import TrustEngine
-
-
 from common.responses import success_response
 
 

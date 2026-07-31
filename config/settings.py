@@ -397,4 +397,7 @@ EMAIL_ENV = env('EMAIL_ENV', default='development')
 EMAIL_TEST_MODE = env.bool('EMAIL_TEST_MODE', default=False)
 SITE_URL = env('SITE_URL', default='https://flyorago.me')
 
+# Max payload size for Base64 image uploads (50MB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
 

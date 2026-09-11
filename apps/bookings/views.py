@@ -31,12 +31,11 @@ class BookingListCreateView(generics.ListCreateAPIView):
             'trip'
         )
         
-        user_only = self.request.query_params.get('user_only', 'true').lower() == 'true'
         admin_all = self.request.query_params.get('admin_all', 'false').lower() == 'true'
         
         if admin_all and (self.request.user.role == 'admin' or self.request.user.is_staff):
             pass  # Admins can view all bookings in the system
-        elif user_only:
+        else:
             queryset = queryset.filter(Q(sender=self.request.user) | Q(traveler=self.request.user))
             
         status_filter = self.request.query_params.get('status')
@@ -66,9 +65,15 @@ class BookingListCreateView(generics.ListCreateAPIView):
             trip.available_weight -= weight
             trip.save()
 
+            # Automatically calculate reward based on traveler's price_per_kg and parcel weight
+            calculated_reward = serializer.validated_data.get('reward', 0)
+            if not calculated_reward or calculated_reward == 0:
+                calculated_reward = weight * trip.price_per_kg
+
             booking = serializer.save(
                 sender=request.user,
                 traveler=trip.user,
+                reward=calculated_reward,
                 status='REQUEST_SENT'
             )
             
@@ -79,7 +84,13 @@ class BookingListCreateView(generics.ListCreateAPIView):
 class BookingDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = BookingSerializer
-    queryset = Booking.objects.all().select_related('sender', 'traveler', 'trip')
+
+    def get_queryset(self):
+        if self.request.user.role == 'admin' or self.request.user.is_staff:
+            return Booking.objects.all().select_related('sender', 'traveler', 'trip')
+        return Booking.objects.filter(
+            Q(sender=self.request.user) | Q(traveler=self.request.user)
+        ).select_related('sender', 'traveler', 'trip')
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()

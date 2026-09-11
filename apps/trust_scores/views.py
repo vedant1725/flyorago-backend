@@ -6,6 +6,7 @@ from .models import TrustProfile, TrustActivityLog, RiskLog
 from .serializers import TrustProfileSerializer, TrustActivityLogSerializer, RiskLogSerializer
 from .engine import TrustEngine
 from common.responses import success_response
+from common.permissions import IsSystemAdmin
 
 
 class MyTrustProfileView(APIView):
@@ -30,7 +31,7 @@ class IsAdminOrStaffUser(permissions.BasePermission):
 
 
 class AdminTrustProfileViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
     serializer_class = TrustProfileSerializer
 
     def get_queryset(self):

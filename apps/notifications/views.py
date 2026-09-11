@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema
 from .models import Notification
 from .serializers import NotificationSerializer
 from common.responses import success_response, failure_response
+from common.permissions import IsSystemAdmin
 
 class NotificationListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -42,7 +43,7 @@ class NotificationMarkReadSingleView(views.APIView):
 
 
 class AdminEmailActivityView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def get(self, request):
         from .models import EmailLog

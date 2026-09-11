@@ -14,8 +14,15 @@ from .serializers import (
     KYCAdminActionSerializer
 )
 from common.responses import success_response, failure_response
+from common.audit_logging import SecurityLogger
 
 User = get_user_model()
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', 'unknown')
 
 class ProfileMeView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -69,34 +76,31 @@ class AddressDestroyView(generics.DestroyAPIView):
 # KYC ENDPOINTS (Used by KycPage and KycAdminPage)
 # ==========================================
 
+from common.permissions import IsSystemAdmin
+
 class KYCStatusView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = KYCStatusResponseSerializer
 
     @extend_schema(responses={200: KYCStatusResponseSerializer})
     def get(self, request, user_id='me'):
-        user = None
-        try:
-            target_id = str(user_id).strip()
-            if target_id.lower() == 'me':
-                if request.user and request.user.is_authenticated:
-                    user = request.user
-                else:
-                    # Return approved default for unauthenticated pre-login UI checks if user not logged in
-                    return success_response(data={'status': 'APPROVED', 'rejectionReason': ''}, message="Default KYC status for pre-login")
-            else:
-                user = User.objects.filter(id=target_id).first()
-                if not user and request.user and request.user.is_authenticated:
-                    user = request.user
-                if not user:
-                    return success_response(data={'status': 'APPROVED', 'rejectionReason': ''}, message="KYC status fallback")
-        except Exception:
-            if request.user and request.user.is_authenticated:
-                user = request.user
-            else:
-                return success_response(data={'status': 'APPROVED', 'rejectionReason': ''}, message="KYC status fallback")
+        user = request.user
+        target_id = str(user_id).strip()
 
-        profile, created = Profile.objects.get_or_create(user=user, defaults={'kyc_status': 'APPROVED'})
+        # If querying specific user ID and user is not admin/staff, restrict to self
+        if target_id.lower() != 'me' and target_id != str(user.id):
+            if not (user.is_staff or user.is_superuser or getattr(user, 'role', '') == 'admin'):
+                return failure_response(
+                    message="Access denied: You can only query your own KYC status.",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
+            # Admin/Staff querying another user
+            query_user = User.objects.filter(id=target_id).first()
+            if not query_user:
+                return failure_response(message="User not found", status_code=status.HTTP_404_NOT_FOUND)
+            user = query_user
+
+        profile, created = Profile.objects.get_or_create(user=user, defaults={'kyc_status': 'NOT_SUBMITTED'})
         data = {
             'status': profile.kyc_status,
             'rejectionReason': profile.kyc_rejection_reason or ""
@@ -104,22 +108,12 @@ class KYCStatusView(views.APIView):
         return success_response(data=data, message="KYC status fetched")
 
 class KYCSubmitView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = KYCSubmitRequestSerializer
 
     @extend_schema(request=KYCSubmitRequestSerializer, responses={200: serializers.Serializer})
     def post(self, request):
-        user_id = request.data.get('userId')
-        if not user_id:
-            return failure_response(message="userId is required", status_code=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            user = User.objects.filter(id=user_id).first()
-            if not user:
-                return failure_response(message="User not found", status_code=status.HTTP_404_NOT_FOUND)
-        except Exception:
-            return failure_response(message="Invalid User ID format", status_code=status.HTTP_400_BAD_REQUEST)
-
+        user = request.user
         try:
             profile, created = Profile.objects.get_or_create(user=user)
             
@@ -138,13 +132,28 @@ class KYCSubmitView(views.APIView):
             except Exception:
                 pass
 
+            SecurityLogger.log_event(
+                'KYC_SUBMIT',
+                user=request.user,
+                status='SUCCESS',
+                description=f"KYC documents submitted successfully. Doc type: {profile.kyc_document_type}",
+                ip_address=get_client_ip(request),
+                additional_data={'document_type': profile.kyc_document_type}
+            )
             return success_response(message="All mandatory KYC documents submitted successfully!")
         except Exception as e:
+            SecurityLogger.log_event(
+                'KYC_SUBMIT',
+                user=request.user,
+                status='FAILURE',
+                description=f"KYC document submission failed: {str(e)}",
+                ip_address=get_client_ip(request)
+            )
             return failure_response(message=f"Failed to submit KYC: {str(e)}", status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class KYCAdminListView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
     serializer_class = KYCAdminListResponseSerializer
 
     @extend_schema(responses={200: KYCAdminListResponseSerializer(many=True)})
@@ -172,7 +181,7 @@ class KYCAdminListView(views.APIView):
 
 
 class KYCAdminActionView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
     serializer_class = KYCAdminActionSerializer
 
     @extend_schema(request=KYCAdminActionSerializer, responses={200: serializers.Serializer})
@@ -217,6 +226,17 @@ class KYCAdminActionView(views.APIView):
             return failure_response(message="Invalid action. Use APPROVE or REJECT.")
 
         profile.save()
+
+        # Log KYC approval/rejection audit trail
+        SecurityLogger.log_event(
+            'KYC_ADMIN_ACTION',
+            user=request.user,
+            status='SUCCESS',
+            description=f"KYC profile for User #{user.id} ({user.email}) set to {profile.kyc_status} (action: {action})",
+            target_object=profile,
+            ip_address=get_client_ip(request),
+            additional_data={'target_user_id': str(user.id), 'action': action, 'reason': reason}
+        )
 
         try:
             from notifications.email_service import EmailService

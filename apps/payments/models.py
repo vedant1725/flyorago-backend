@@ -46,3 +46,29 @@ class PaymentRecord(models.Model):
 
     def __str__(self):
         return f"PaymentRecord {self.transaction_id} - ${self.amount} ({self.status})"
+
+
+class SystemSetting(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    value = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.key}: {self.value}"
+
+    @classmethod
+    def get_setting(cls, key, default=None):
+        try:
+            return cls.objects.get(key=key).value
+        except cls.DoesNotExist:
+            if default is not None:
+                cls.objects.create(key=key, value=str(default))
+                return str(default)
+            return None
+
+    @classmethod
+    def set_setting(cls, key, value):
+        setting, _ = cls.objects.get_or_create(key=key)
+        setting.value = str(value)
+        setting.save()
+        return setting

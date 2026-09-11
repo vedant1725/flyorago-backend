@@ -30,3 +30,17 @@ class IsKYCApproved(permissions.BasePermission):
 
         return profile.kyc_status != 'REJECTED'
 
+
+class IsSystemAdmin(permissions.BasePermission):
+    """
+    Allows access only to authenticated users who are staff, superusers, or have the role 'admin'.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user and
+            user.is_authenticated and
+            (user.is_staff or user.is_superuser or getattr(user, 'role', '') == 'admin')
+        )
+
+

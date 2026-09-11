@@ -8,7 +8,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .models import FAQ, Ticket, TicketReply, Dispute, DisputeImage, ContactMessage
 from .serializers import FAQSerializer, TicketSerializer, TicketReplySerializer, DisputeSerializer, AdminDisputeSerializer, ContactMessageSerializer
 from common.responses import success_response, failure_response
-from common.permissions import IsKYCApproved
+from common.permissions import IsKYCApproved, IsSystemAdmin
 from wallet.models import Wallet, Transaction
 
 class FAQListView(generics.ListAPIView):
@@ -129,7 +129,7 @@ class DisputeListCreateView(generics.ListCreateAPIView):
         return failure_response(errors=serializer.errors, message="Failed to raise dispute.")
 
 class AdminDisputeListView(generics.ListAPIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
     serializer_class = AdminDisputeSerializer
     
     def get_queryset(self):
@@ -145,10 +145,11 @@ class AdminDisputeListView(generics.ListAPIView):
         return success_response(data=serializer.data, message="All disputes retrieved.")
 
 class AdminDisputeActionView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     @transaction.atomic
     def post(self, request, pk):
+        from common.audit_logging import SecurityLogger
         action = request.data.get('action')
         reason = request.data.get('reason')
         dispute = get_object_or_404(Dispute, pk=pk)
@@ -204,6 +205,16 @@ class AdminDisputeActionView(views.APIView):
         dispute.save()
         booking.save()
         
+        # Log security audit event
+        SecurityLogger.log_event(
+            'ADMIN_DISPUTE_ACTION',
+            user=request.user,
+            status='SUCCESS',
+            description=f"Dispute #{dispute.id} resolved with action {action}",
+            target_object=dispute,
+            additional_data={'action': action, 'reason': reason}
+        )
+        
         # Socket notification
         from bookings.services import BookingWorkflowService
         notification_msg = "Your dispute has been approved! You received a 20% compensation." if action == 'APPROVE' else f"Dispute status changed to {dispute.status}"
@@ -227,7 +238,7 @@ class ContactMessageCreateView(generics.CreateAPIView):
         return failure_response(errors=serializer.errors, message="Failed to send contact message")
 
 class AdminContactMessageListView(generics.ListAPIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
     serializer_class = ContactMessageSerializer
 
     def get_queryset(self):
@@ -252,7 +263,7 @@ class AdminContactMessageListView(generics.ListAPIView):
         return success_response(data=serializer.data, message="Contact messages retrieved successfully")
 
 class AdminContactMessageDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
     serializer_class = ContactMessageSerializer
     queryset = ContactMessage.objects.all()
 

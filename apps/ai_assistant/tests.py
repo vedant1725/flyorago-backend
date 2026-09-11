@@ -3,15 +3,26 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
-from apps.ai_assistant.models import AIKnowledgeBaseItem
-from apps.ai_assistant.llm_engine import LLMEngine
-from apps.ai_assistant.knowledge_base import retrieve_knowledge_context, detect_language
+from ai_assistant.models import AIKnowledgeBaseItem
+from ai_assistant.llm_engine import LLMEngine
+from ai_assistant.knowledge_base import retrieve_knowledge_context, detect_language
 
 class FlyoraAIChatbotTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.chat_url = reverse('flyora_ai_chat')
         self.admin_faq_url = reverse('admin_ai_knowledge')
+        
+        # Create admin user for secured endpoints
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.admin_user = User.objects.create_superuser(
+            email='admin_test@flyorago.com',
+            password='Password123!',
+            first_name='Admin',
+            last_name='User',
+            role='admin'
+        )
         
         # Create sample DB FAQ
         self.custom_faq = AIKnowledgeBaseItem.objects.create(
@@ -118,6 +129,7 @@ class FlyoraAIChatbotTests(TestCase):
 
     def test_admin_faq_crud(self):
         """Test Admin AI Settings / FAQ CRUD functionality."""
+        self.client.force_authenticate(user=self.admin_user)
         # Get list
         get_res = self.client.get(self.admin_faq_url)
         self.assertEqual(get_res.status_code, 200)

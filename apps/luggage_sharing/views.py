@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from common.permissions import IsSystemAdmin
 from django.db.models import Sum, Q, Avg
 from django.utils import timezone
 from notifications.models import Notification
@@ -293,9 +294,13 @@ class LuggageBookingActionView(APIView):
             return Response({'status': 'error', 'message': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
         user = request.user
+        is_owner = (booking.owner == user)
+        is_booker = (booking.booker == user)
+        is_admin = (user.role == 'admin' or user.is_staff or user.is_superuser)
 
         if action == 'accept':
-            # Allow owner or admin or testing
+            if not is_owner and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only listing owner can accept.'}, status=status.HTTP_403_FORBIDDEN)
             booking.status = 'ACCEPTED'
             booking.save()
 
@@ -311,6 +316,8 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'reject':
+            if not is_owner and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only listing owner can reject.'}, status=status.HTTP_403_FORBIDDEN)
             booking.status = 'REJECTED'
             booking.save()
 
@@ -324,6 +331,8 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'pay':
+            if not is_booker and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only booker can pay.'}, status=status.HTTP_403_FORBIDDEN)
             if booking.status != 'ACCEPTED':
                 return Response({'status': 'error', 'message': 'Payment is only available after request is approved.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -340,6 +349,8 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'verify_luggage':
+            if not is_owner and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only traveller can verify luggage.'}, status=status.HTTP_403_FORBIDDEN)
             images = request.data.get('bag_images', '[]')
             weight = Decimal(str(request.data.get('weight', booking.booked_weight)))
             notes = request.data.get('notes', '')
@@ -372,6 +383,8 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'start_transit':
+            if not is_owner and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only traveller can start transit.'}, status=status.HTTP_403_FORBIDDEN)
             booking.status = 'IN_TRANSIT'
             booking.save()
 
@@ -390,6 +403,8 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'arrived':
+            if not is_owner and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only traveller can mark arrived.'}, status=status.HTTP_403_FORBIDDEN)
             booking.status = 'ARRIVED'
             booking.save()
 
@@ -408,6 +423,8 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'verify_qr':
+            if not is_owner and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only traveller can verify QR.'}, status=status.HTTP_403_FORBIDDEN)
             qr_token = request.data.get('qr_code_token', '').strip()
             is_valid = (qr_token.upper() == booking.qr_code_token.upper())
 
@@ -435,6 +452,8 @@ class LuggageBookingActionView(APIView):
             )
 
         elif action == 'verify_otp':
+            if not is_owner and not is_admin:
+                return Response({'status': 'error', 'message': 'Access denied: Only traveller can verify OTP.'}, status=status.HTTP_403_FORBIDDEN)
             otp_input = request.data.get('otp', '').strip()
             is_valid = (otp_input == booking.otp_code)
 
@@ -466,7 +485,6 @@ class LuggageBookingActionView(APIView):
             'data': LuggageBookingSerializer(booking).data
         })
 
-
 class LuggageQRVerificationView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -481,6 +499,13 @@ class LuggageQRVerificationView(APIView):
 
         if not booking:
             return Response({'status': 'error', 'message': f'Booking for QR Token "{qr_scanned}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        is_owner = (booking.owner == request.user)
+        is_booker = (booking.booker == request.user)
+        is_admin = (request.user.role == 'admin' or request.user.is_staff or request.user.is_superuser)
+
+        if not is_owner and not is_booker and not is_admin:
+            return Response({'status': 'error', 'message': 'Access denied: You are not authorized to verify this booking.'}, status=status.HTTP_403_FORBIDDEN)
 
         is_valid = (qr_scanned.upper() == booking.qr_code_token.upper())
         LuggageQRLog.objects.create(
@@ -519,6 +544,13 @@ class LuggageRatingView(APIView):
         except LuggageBooking.DoesNotExist:
             return Response({'status': 'error', 'message': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        is_owner = (booking.owner == request.user)
+        is_booker = (booking.booker == request.user)
+        is_admin = (request.user.role == 'admin' or request.user.is_staff or request.user.is_superuser)
+
+        if not is_owner and not is_booker and not is_admin:
+            return Response({'status': 'error', 'message': 'Access denied: You are not authorized to rate this booking.'}, status=status.HTTP_403_FORBIDDEN)
+
         reviewee = booking.owner if request.user == booking.booker else booking.booker
 
         review = LuggageReview.objects.create(
@@ -549,6 +581,13 @@ class LuggageDisputeView(APIView):
         except LuggageBooking.DoesNotExist:
             return Response({'status': 'error', 'message': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        is_owner = (booking.owner == request.user)
+        is_booker = (booking.booker == request.user)
+        is_admin = (request.user.role == 'admin' or request.user.is_staff or request.user.is_superuser)
+
+        if not is_owner and not is_booker and not is_admin:
+            return Response({'status': 'error', 'message': 'Access denied: You are not authorized to raise a dispute on this booking.'}, status=status.HTTP_403_FORBIDDEN)
+
         booking.status = 'DISPUTED'
         booking.save()
 
@@ -564,7 +603,7 @@ class LuggageDisputeView(APIView):
 
 
 class LuggageAdminView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def get(self, request):
         listings = LuggageListing.objects.all()[:50]

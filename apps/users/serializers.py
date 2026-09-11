@@ -39,10 +39,10 @@ class UserSerializer(serializers.ModelSerializer):
     def get_kyc_status(self, obj) -> str:
         from profiles.models import Profile
         try:
-            profile, created = Profile.objects.get_or_create(user=obj, defaults={'kyc_status': 'APPROVED'})
+            profile, created = Profile.objects.get_or_create(user=obj, defaults={'kyc_status': 'NOT_SUBMITTED'})
             return profile.kyc_status
         except Exception:
-            return 'APPROVED'
+            return 'NOT_SUBMITTED'
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
@@ -50,6 +50,15 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('email', 'password', 'first_name', 'last_name', 'phone_number', 'role')
+
+    def validate_password(self, value):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
 
     def create(self, validated_data):
         email = validated_data['email'].strip().lower()
@@ -62,7 +71,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             role=validated_data.get('role', 'sender'),
         )
         from profiles.models import Profile
-        Profile.objects.get_or_create(user=user, defaults={'kyc_status': 'APPROVED'})
+        Profile.objects.get_or_create(user=user, defaults={'kyc_status': 'NOT_SUBMITTED'})
         return user
 
 class OTPSerializer(serializers.Serializer):
@@ -76,3 +85,12 @@ class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     otp = serializers.CharField(required=True, min_length=6, max_length=6)
     new_password = serializers.CharField(required=True, min_length=8, write_only=True)
+
+    def validate_new_password(self, value):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value

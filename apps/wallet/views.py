@@ -15,6 +15,13 @@ from .serializers import (
 )
 from common.responses import success_response, failure_response
 from common.permissions import IsKYCApproved
+from common.audit_logging import SecurityLogger
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', 'unknown')
 
 class WalletSummaryView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -87,6 +94,14 @@ class WithdrawView(views.APIView):
             payout = get_object_or_404(PayoutMethod, id=payout_id, wallet=wallet)
             
             if wallet.balance_available < amount:
+                SecurityLogger.log_event(
+                    'WALLET_WITHDRAW',
+                    user=request.user,
+                    status='FAILURE',
+                    description=f"Insufficient balance for withdrawal of ${amount}",
+                    ip_address=get_client_ip(request),
+                    additional_data={'amount': float(amount), 'payout_method_id': payout_id}
+                )
                 return failure_response(message="Insufficient available funds for withdrawal request")
                 
             wallet.balance_available -= amount
@@ -98,6 +113,15 @@ class WithdrawView(views.APIView):
                 type='Withdrawal',
                 status='Completed',
                 description=f"Withdrawal transfer to {payout.provider} ({payout.mask})"
+            )
+            
+            SecurityLogger.log_event(
+                'WALLET_WITHDRAW',
+                user=request.user,
+                status='SUCCESS',
+                description=f"Withdrawal of ${amount} to payout method {payout.id} processed",
+                ip_address=get_client_ip(request),
+                additional_data={'amount': float(amount), 'payout_method_id': payout_id}
             )
             
             return success_response(
@@ -128,6 +152,15 @@ class DepositView(views.APIView):
                 type='Deposit',
                 status='Completed',
                 description=f"Deposit loaded via {method}"
+            )
+            
+            SecurityLogger.log_event(
+                'WALLET_DEPOSIT',
+                user=request.user,
+                status='SUCCESS',
+                description=f"Deposit of ${amount} loaded via {method}",
+                ip_address=get_client_ip(request),
+                additional_data={'amount': float(amount), 'method': method}
             )
             
             return success_response(

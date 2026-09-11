@@ -12,18 +12,26 @@ from common.admin_views import (
     AdminDashboardOverviewView, SenderDashboardOverviewView, TravelerDashboardOverviewView, UserDashboardOverviewView
 )
 from notifications.views import AdminEmailActivityView
+from rest_framework.views import APIView
+from common.permissions import IsSystemAdmin
 
-def run_migrations_view(request):
-    from django.core.management import call_command
-    from django.http import JsonResponse
-    try:
-        call_command('migrate', interactive=False)
-        return JsonResponse({'status': 'success', 'message': 'All database migrations applied successfully!'})
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+class RunMigrationsView(APIView):
+    permission_classes = [IsSystemAdmin]
+
+    def get(self, request):
+        from django.core.management import call_command
+        from django.http import JsonResponse
+        try:
+            call_command('migrate', interactive=False)
+            return JsonResponse({'status': 'success', 'message': 'All database migrations applied successfully!'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    def post(self, request):
+        return self.get(request)
 
 urlpatterns = [
-    path('api/admin/run-migrations/', run_migrations_view, name='run_migrations'),
+    path('api/admin/run-migrations/', RunMigrationsView.as_view(), name='run_migrations'),
     path('', api_root, name='api_root'),
     path('admin/', admin.site.urls),
 

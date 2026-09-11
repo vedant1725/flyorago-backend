@@ -2,12 +2,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework import status
+from common.permissions import IsSystemAdmin
 from .knowledge_base import QUICK_NAV_ACTIONS
 from .llm_engine import LLMEngine
 from .models import AIKnowledgeBaseItem
 
 class FlyoraAIChatView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'ai_chat'
 
     def post(self, request):
         prompt = request.data.get('prompt', '').strip()
@@ -68,7 +70,7 @@ class FlyoraAIPromptsView(APIView):
 
 
 class AdminAIKnowledgeView(APIView):
-    permission_classes = [AllowAny]  # Allow admin access
+    permission_classes = [IsSystemAdmin]  # Allow admin access
 
     def get(self, request):
         items = AIKnowledgeBaseItem.objects.all().order_by('-created_at')

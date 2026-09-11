@@ -8,6 +8,7 @@ from drf_spectacular.utils import extend_schema
 
 from .responses import success_response
 from .performance import fast_api_cache
+from .permissions import IsSystemAdmin
 
 
 
@@ -21,7 +22,7 @@ class AdminChartDataView(views.APIView):
     GET /api/admin/chart/?period=day|week|month
     Returns time-series data for trips, bookings, users, shipments.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     @fast_api_cache(timeout=30, key_prefix="admin_chart")
     def get(self, request):
@@ -105,7 +106,7 @@ class AdminChartDataView(views.APIView):
 
 # ─── Stats ────────────────────────────────────────────────────────────────────
 class AdminStatsView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     @fast_api_cache(timeout=30, key_prefix="admin_stats")
     def get(self, request):
@@ -185,7 +186,7 @@ class AdminStatsView(views.APIView):
 
 # ─── Data Tables ──────────────────────────────────────────────────────────────
 class AdminTripsListView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     @fast_api_cache(timeout=15, key_prefix="admin_trips")
     def get(self, request):
@@ -196,7 +197,7 @@ class AdminTripsListView(views.APIView):
 
 
 class AdminBookingsListView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     @fast_api_cache(timeout=15, key_prefix="admin_bookings")
     def get(self, request):
@@ -207,7 +208,7 @@ class AdminBookingsListView(views.APIView):
 
 
 class AdminShipmentsListView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     @fast_api_cache(timeout=15, key_prefix="admin_shipments")
     def get(self, request):
@@ -220,7 +221,7 @@ class AdminShipmentsListView(views.APIView):
 
 
 class AdminUsersListView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     @fast_api_cache(timeout=15, key_prefix="admin_users")
     def get(self, request):
@@ -247,7 +248,7 @@ class AdminUsersListView(views.APIView):
 
 # ─── Trip Actions ─────────────────────────────────────────────────────────────
 class AdminTripActionView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def patch(self, request, pk):
         from trips.models import Trip
@@ -274,7 +275,7 @@ class AdminTripActionView(views.APIView):
 
 # ─── Booking Actions ──────────────────────────────────────────────────────────
 class AdminBookingActionView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def patch(self, request, pk):
         from bookings.models import Booking
@@ -301,7 +302,7 @@ class AdminBookingActionView(views.APIView):
 
 # ─── Shipment Actions ─────────────────────────────────────────────────────────
 class AdminShipmentActionView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def patch(self, request, pk):
         from shipments.models import Shipment
@@ -328,7 +329,7 @@ class AdminShipmentActionView(views.APIView):
 
 # ─── User Actions ─────────────────────────────────────────────────────────────
 class AdminUserActionView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def patch(self, request, pk):
         try:
@@ -377,7 +378,7 @@ class AdminChangeCredentialsView(views.APIView):
     Payload: { "email": string, "current_password": string, "new_password": string }
     Updates admin user credentials & password directly in the database.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def post(self, request):
         email = request.data.get('email', '').strip()
@@ -452,7 +453,7 @@ class AdminDashboardOverviewView(views.APIView):
     GET /api/admin/dashboard-overview/?period=week
     Consolidates ALL 10 admin API calls into 1 single ultra-fast response (< 20ms).
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsSystemAdmin]
 
     def get(self, request):
         from trips.models import Trip

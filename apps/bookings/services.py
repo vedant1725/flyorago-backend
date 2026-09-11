@@ -182,6 +182,44 @@ class BookingWorkflowService:
         booking.escrow_status = 'Active Hold'
         booking.save()
         
+        # Create PaymentRecord and update escrow trace
+        try:
+            from payments.models import SystemSetting, PaymentRecord
+            from wallet.models import Wallet, Transaction
+            from decimal import Decimal
+            import random
+
+            fee_str = SystemSetting.get_setting("platform_fee", "10.00")
+            platform_fee = Decimal(fee_str)
+            total_amount = booking.reward + platform_fee
+
+            # Create PaymentRecord
+            tx_id = f"ch_{random.randint(10000000, 99999999)}"
+            PaymentRecord.objects.create(
+                user=booking.sender,
+                booking=booking,
+                transaction_id=tx_id,
+                amount=total_amount,
+                platform_fee=platform_fee,
+                status='Success'
+            )
+
+            # Update wallet trace for Sender
+            sender_wallet, _ = Wallet.objects.get_or_create(user=booking.sender)
+            sender_wallet.balance_escrow += total_amount
+            sender_wallet.save()
+
+            Transaction.objects.create(
+                wallet=sender_wallet,
+                amount=total_amount,
+                type='Escrow Hold',
+                status='Completed',
+                description=f"Escrow deposit for cargo carried on Booking #{booking.id}",
+                reference_id=str(booking.id)
+            )
+        except Exception as e:
+            print(f"Failed to record platform fee or update wallet escrow: {e}")
+        
         BookingWorkflowService.trigger_websocket_notification(
             booking, 'paid', f"Payment received for Booking #{booking.id}. Funds in escrow."
         )

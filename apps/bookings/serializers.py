@@ -5,6 +5,7 @@ from trips.models import Trip
 class BookingSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source='sender.first_name', read_only=True)
     traveler_name = serializers.CharField(source='traveler.first_name', read_only=True)
+    trip_price_per_kg = serializers.DecimalField(source='trip.price_per_kg', max_digits=10, decimal_places=2, read_only=True)
     
     # Nested fields matching the frontend interfaces
     package = serializers.SerializerMethodField()
@@ -22,7 +23,7 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'sender_name', 'traveler_name', 'trip', 'sender_trip',
             'package_name', 'package_category', 'package_image',
-            'weight', 'reward', 'status', 'payment_status', 'escrow_status', 'delivery_otp',
+            'weight', 'reward', 'trip_price_per_kg', 'status', 'payment_status', 'escrow_status', 'delivery_otp',
             'created_at', 'updated_at',
             'package', 'route', 'sender', 'traveler',
             'createdAt', 'paymentStatus', 'escrow', 'accepted_parcel_types'

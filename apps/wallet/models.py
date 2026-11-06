@@ -6,7 +6,7 @@ class Wallet(models.Model):
     balance_available = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     balance_pending = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     balance_escrow = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    currency = models.CharField(max_length=10, default='USD')
+    currency = models.CharField(max_length=10, default='INR')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

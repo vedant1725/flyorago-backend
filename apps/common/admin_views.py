@@ -223,10 +223,48 @@ class AdminShipmentsListView(views.APIView):
 class AdminUsersListView(views.APIView):
     permission_classes = [IsSystemAdmin]
 
-    @fast_api_cache(timeout=15, key_prefix="admin_users")
     def get(self, request):
         from profiles.models import Profile
-        profiles = Profile.objects.select_related('user').all().order_by('-user__date_joined')
+        from django.db.models import Q
+
+        search_query = request.query_params.get('search', '').strip()
+        role_filter = request.query_params.get('role', '').strip()
+        kyc_filter = request.query_params.get('kyc_status', '').strip()
+        status_filter = request.query_params.get('status', '').strip()  # 'active', 'blocked'
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 50))
+
+        qs = Profile.objects.select_related('user').all()
+
+        if search_query:
+            qs = qs.filter(
+                Q(user__email__icontains=search_query) |
+                Q(user__first_name__icontains=search_query) |
+                Q(user__last_name__icontains=search_query) |
+                Q(user__phone_number__icontains=search_query) |
+                Q(user__id__icontains=search_query)
+            )
+
+        if role_filter and role_filter.lower() != 'all':
+            qs = qs.filter(user__role__iexact=role_filter)
+
+        if kyc_filter and kyc_filter.upper() != 'ALL':
+            qs = qs.filter(kyc_status__iexact=kyc_filter)
+
+        if status_filter:
+            if status_filter.lower() == 'active':
+                qs = qs.filter(user__is_active=True)
+            elif status_filter.lower() == 'blocked':
+                qs = qs.filter(user__is_active=False)
+
+        total_count = qs.count()
+        qs = qs.order_by('-user__date_joined')
+
+        # Pagination
+        start = (page - 1) * page_size
+        end = start + page_size
+        profiles = qs[start:end]
+
         data = []
         for profile in profiles:
             u = profile.user
@@ -242,8 +280,20 @@ class AdminUsersListView(views.APIView):
                 'isStaff': u.is_staff,
                 'dateJoined': u.date_joined.isoformat() if u.date_joined else None,
                 'kycStatus': profile.kyc_status,
+                'trustScore': profile.trust_score,
+                'completedTrips': profile.completed_trips,
             })
-        return success_response(data=data, message='All users')
+
+        return success_response(
+            data={
+                'users': data,
+                'total': total_count,
+                'page': page,
+                'pageSize': page_size,
+                'totalPages': (total_count + page_size - 1) // page_size if page_size > 0 else 1
+            },
+            message='All users'
+        )
 
 
 # ─── Trip Actions ─────────────────────────────────────────────────────────────
@@ -483,6 +533,10 @@ class AdminDashboardOverviewView(views.APIView):
         pending_kyc = kyc_qs.filter(kyc_status='PENDING').count()
         approved_kyc = kyc_qs.filter(kyc_status='APPROVED').count()
 
+        from payments.models import PaymentRecord
+        from django.db.models import Sum
+        total_platform_fees = PaymentRecord.objects.filter(status='Success').aggregate(total=Sum('platform_fee'))['total'] or 0.0
+
         stats = {
             'totalUsers': total_users,
             'newUsersThisWeek': new_users_week,
@@ -494,6 +548,7 @@ class AdminDashboardOverviewView(views.APIView):
             'inTransitShipments': in_transit_shipments,
             'pendingKyc': pending_kyc,
             'approvedKyc': approved_kyc,
+            'totalPlatformEarnings': float(total_platform_fees),
             'kycBreakdown': {
                 'APPROVED': approved_kyc,
                 'PENDING': pending_kyc,
@@ -658,6 +713,34 @@ class AdminDashboardOverviewView(views.APIView):
         except Exception:
             pass
 
+        # 9. Platform Fee Revenues & Breakdown per User
+        platform_revenue_records = []
+        try:
+            for pr in PaymentRecord.objects.filter(status='Success').select_related('user', 'booking').order_by('-created_at')[:100]:
+                u = pr.user
+                u_name = f"{u.first_name} {u.last_name}".strip() or u.email.split('@')[0]
+                role_label = 'Sender'
+                if pr.booking and pr.booking.traveler_id == u.id:
+                    role_label = 'Traveler'
+                elif pr.booking and pr.booking.sender_id == u.id:
+                    role_label = 'Sender'
+
+                platform_revenue_records.append({
+                    'id': pr.id,
+                    'transaction_id': pr.transaction_id,
+                    'userId': u.id,
+                    'userName': u_name,
+                    'userEmail': u.email,
+                    'userRole': role_label,
+                    'bookingId': pr.booking.id if pr.booking else None,
+                    'totalAmount': float(pr.amount),
+                    'platformFee': float(pr.platform_fee),
+                    'status': pr.status,
+                    'createdAt': pr.created_at.strftime('%Y-%m-%d %H:%M')
+                })
+        except Exception:
+            pass
+
         return success_response(
             data={
                 'stats': stats,
@@ -670,6 +753,7 @@ class AdminDashboardOverviewView(views.APIView):
                 'disputes': disputes_data,
                 'contactMessages': contact_messages,
                 'trustProfiles': trust_profiles,
+                'platformRevenues': platform_revenue_records,
             },
             message="Admin Dashboard Consolidated Overview Fetched"
         )
@@ -738,9 +822,24 @@ class TravelerDashboardOverviewView(views.APIView):
         from bookings.serializers import BookingSerializer
         from notifications.models import Notification
         user = request.user
+        from django.db.models import Sum
+        from decimal import Decimal
         traveler_trips_qs = Trip.objects.filter(user=user).exclude(airline='SENDER_REQUEST').select_related('user').order_by('-created_at')
         bookings_qs = Booking.objects.filter(Q(traveler=user) | Q(sender=user)).select_related('sender', 'traveler', 'trip').order_by('-created_at')
         available_senders_qs = Trip.objects.filter(airline='SENDER_REQUEST', status='Active').select_related('user').order_by('-created_at')[:50]
+        
+        # Calculate real traveler earnings strictly when payment has been released
+        completed_bookings = Booking.objects.filter(
+            traveler=user
+        ).filter(
+            Q(status='PAYMENT_RELEASED') | Q(payment_status='Released') | Q(escrow_status='Released')
+        )
+        total_earnings = completed_bookings.aggregate(total=Sum('reward'))['total'] or Decimal('0.00')
+        completed_count = traveler_trips_qs.filter(status__in=['COMPLETED', 'Completed']).count()
+        delivered_count = Booking.objects.filter(
+            traveler=user,
+            status__in=['DELIVERED', 'Delivered', 'COMPLETED', 'Completed', 'PAYMENT_RELEASED']
+        ).count()
         
         notif_list = []
         try:
@@ -766,7 +865,10 @@ class TravelerDashboardOverviewView(views.APIView):
                 'trips': TripSerializer(traveler_trips_qs, many=True).data,
                 'bookings': BookingSerializer(bookings_qs, many=True).data,
                 'availableSenders': TripSerializer(available_senders_qs, many=True).data,
-                'notifications': notif_list
+                'notifications': notif_list,
+                'total_earnings': float(total_earnings),
+                'completed_trips': completed_count,
+                'delivered_packages': delivered_count
             },
             message="Traveler Dashboard Overview Fetched"
         )

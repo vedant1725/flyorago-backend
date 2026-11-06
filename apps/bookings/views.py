@@ -1,4 +1,9 @@
+import logging
+from notifications.services import MultiLevelNotificationEngine
+from notifications.models import Notification
 from rest_framework import generics, permissions, status, views
+
+logger = logging.getLogger(__name__)
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Q
@@ -58,24 +63,85 @@ class BookingListCreateView(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            trip = serializer.validated_data['trip']
+            trip = serializer.validated_data.get('trip')
             weight = serializer.validated_data['weight']
-            
-            # Reduce trip weight
-            trip.available_weight -= weight
-            trip.save()
+
+            if trip:
+                # Prevent self-matching
+                if trip.user == request.user:
+                    return failure_response(message="Self-matching is not permitted. You cannot book your own trip.", status_code=status.HTTP_400_BAD_REQUEST)
+
+                # Prevent duplicate active requests
+                existing = Booking.objects.filter(
+                    sender=request.user,
+                    trip=trip,
+                    status__in=['REQUEST_SENT', 'ACCEPTED', 'PAID', 'PARCEL_VERIFIED', 'IN_TRANSIT', 'ARRIVED', 'OUT_FOR_DELIVERY']
+                ).exists()
+                if existing:
+                    return failure_response(message="You have already sent an active request for this trip.", status_code=status.HTTP_400_BAD_REQUEST)
+                
+                # Reduce trip weight
+                trip.available_weight -= weight
+                trip.save()
 
             # Automatically calculate reward based on traveler's price_per_kg and parcel weight
             calculated_reward = serializer.validated_data.get('reward', 0)
-            if not calculated_reward or calculated_reward == 0:
+            if (not calculated_reward or calculated_reward == 0) and trip:
                 calculated_reward = weight * trip.price_per_kg
+
+            rec_name = (request.data.get('receiver_name') or request.data.get('receiverName') or serializer.validated_data.get('receiver_name') or '').strip()
+            rec_phone = (request.data.get('receiver_phone') or request.data.get('receiverPhone') or serializer.validated_data.get('receiver_phone') or '').strip()
+            rec_addr = (request.data.get('receiver_address') or request.data.get('receiverAddress') or serializer.validated_data.get('receiver_address') or '').strip()
+
+            # If sender_trip is linked, pull missing receiver details from it
+            sender_trip_obj = serializer.validated_data.get('sender_trip')
+            if not sender_trip_obj:
+                st_id = request.data.get('sender_trip_id') or request.data.get('sender_trip')
+                if st_id:
+                    from trips.models import Trip as TripModel
+                    sender_trip_obj = TripModel.objects.filter(id=st_id).first()
+
+            if sender_trip_obj:
+                if (not rec_name or rec_name.lower() == 'receiver') and sender_trip_obj.terminal_from and sender_trip_obj.terminal_from != 'N/A':
+                    rec_name = sender_trip_obj.terminal_from.strip()
+                if not rec_phone and sender_trip_obj.terminal_to and sender_trip_obj.terminal_to != 'N/A':
+                    rec_phone = sender_trip_obj.terminal_to.strip()
+                if not rec_addr and sender_trip_obj.to_location:
+                    rec_addr = sender_trip_obj.to_location.strip()
+                if sender_trip_obj.notes:
+                    try:
+                        import json
+                        st_notes = json.loads(sender_trip_obj.notes)
+                        if isinstance(st_notes, dict):
+                            if not rec_name or rec_name.lower() == 'receiver':
+                                rec_name = (st_notes.get('receiver_name') or st_notes.get('receiverName') or '').strip()
+                            if not rec_phone:
+                                rec_phone = (st_notes.get('receiver_phone') or st_notes.get('receiverPhone') or '').strip()
+                            if not rec_addr:
+                                rec_addr = (st_notes.get('receiver_address') or st_notes.get('receiverAddress') or '').strip()
+                    except Exception:
+                        pass
 
             booking = serializer.save(
                 sender=request.user,
-                traveler=trip.user,
+                traveler=trip.user if trip else None,
                 reward=calculated_reward,
-                status='REQUEST_SENT'
+                status='REQUEST_SENT' if trip else 'REQUEST_CREATED',
+                receiver_name=rec_name,
+                receiver_phone=rec_phone,
+                receiver_address=rec_addr
             )
+
+            if trip:
+                try:
+                    MultiLevelNotificationEngine.send_user_notification(
+                        user=trip.user,
+                        title='New Parcel Delivery Request 📦',
+                        message=f'{request.user.first_name or "A Sender"} sent a delivery request for "{booking.package_name}" ({booking.weight} kg).',
+                        type='booking'
+                    )
+                except Exception:
+                    pass
             
             full_data = BookingSerializer(booking).data
             return success_response(data=full_data, message="Booking request sent successfully", status_code=status.HTTP_201_CREATED)
@@ -123,18 +189,28 @@ class BookingActionView(views.APIView):
                 if not is_sender and not is_admin:
                     return failure_response(message="Only sender can send request")
                 booking = BookingWorkflowService.send_request(booking)
+                if booking.traveler:
+                    MultiLevelNotificationEngine.send_user_notification(
+                        user=booking.traveler,
+                        title='New Parcel Request Received 📦',
+                        message=f'{request.user.first_name or request.user.email} sent a delivery request for "{booking.package_name}" ({booking.weight} kg).',
+                        notif_type='booking',
+                        extra={'booking_id': booking.id, 'action': 'SEND_REQUEST'}
+                    )
                 return success_response(data=BookingSerializer(booking).data, message="Booking request sent")
 
             elif action in ['ACCEPT', 'Accept']:
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can accept")
                 booking = BookingWorkflowService.accept_request(booking)
-                from notifications.models import Notification
-                Notification.objects.create(
+                
+                # Notify Sender only
+                MultiLevelNotificationEngine.send_user_notification(
                     user=booking.sender,
                     title='Parcel Request Accepted 🎉',
-                    message=f'Traveler accepted your request for parcel "{booking.package_name}". Proceed to payment!',
-                    type='booking'
+                    message=f'Traveler {request.user.first_name or ""} accepted your request for parcel "{booking.package_name}". Proceed to payment!',
+                    notif_type='booking',
+                    extra={'booking_id': booking.id, 'action': 'ACCEPT'}
                 )
                 return success_response(data=BookingSerializer(booking).data, message="Booking accepted")
 
@@ -146,13 +222,13 @@ class BookingActionView(views.APIView):
                 if booking.trip and booking.weight:
                     booking.trip.available_weight += booking.weight
                     booking.trip.save()
-                from notifications.models import Notification
-                Notification.objects.create(
-                    user=booking.sender,
-                    title='Parcel Request Rejected ❌',
-                    message=f'Traveler declined your request for parcel "{booking.package_name}".',
-                    type='booking'
-                )
+                    MultiLevelNotificationEngine.send_user_notification(
+                        user=booking.sender,
+                        title='Parcel Request Declined ❌',
+                        message=f'Traveler declined your request for parcel "{booking.package_name}".',
+                        notif_type='booking',
+                        extra={'booking_id': booking.id, 'action': 'REJECT'}
+                    )
                 BookingWorkflowService.trigger_websocket_notification(
                     booking, 'rejected', f"Traveler rejected Booking #{booking.id}."
                 )
@@ -161,25 +237,61 @@ class BookingActionView(views.APIView):
             elif action in ['PAY', 'MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW']:
                 if not is_sender and not is_admin:
                     return failure_response(message="Only sender can pay")
-                booking = BookingWorkflowService.process_payment(booking)
+                payment_method = request.data.get('payment_method') or (request.data.get('payload') or {}).get('payment_method') or 'card'
+                try:
+                    booking = BookingWorkflowService.process_payment(booking, payment_method=payment_method)
+                except ValueError as val_err:
+                    return failure_response(message=str(val_err), status_code=status.HTTP_400_BAD_REQUEST)
+                # Notify Traveler only
+                MultiLevelNotificationEngine.send_user_notification(
+                    user=booking.traveler,
+                    title='💰 Payment Secured in Escrow!',
+                    message=f'{booking.sender.first_name or "Sender"} deposited ₹{booking.reward} into Escrow for "{booking.package_name}". Funds are secured! You can now verify the parcel.',
+                    notif_type='payment',
+                    extra={'booking_id': booking.id, 'action': 'PAY'}
+                )
                 return success_response(data=BookingSerializer(booking).data, message="Payment secured in Escrow")
 
             elif action == 'VERIFY_PARCEL':
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can verify parcel")
                 booking = BookingWorkflowService.upload_verification(booking)
+                # Notify Sender only
+                MultiLevelNotificationEngine.send_user_notification(
+                    user=booking.sender,
+                    title='Parcel Verified & Picked Up! 📦',
+                    message=f'Traveler {booking.traveler.first_name or ""} has verified and picked up your parcel "{booking.package_name}".',
+                    notif_type='booking',
+                    extra={'booking_id': booking.id, 'action': 'VERIFY_PARCEL'}
+                )
                 return success_response(data=BookingSerializer(booking).data, message="Parcel verified")
 
             elif action == 'START_TRANSIT':
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can start transit")
                 booking = BookingWorkflowService.update_transit_status(booking, 'IN_TRANSIT')
+                # Notify Sender only
+                MultiLevelNotificationEngine.send_user_notification(
+                    user=booking.sender,
+                    title='Luggage In Transit ✈️',
+                    message=f'Traveler is now in transit with your parcel "{booking.package_name}".',
+                    notif_type='booking',
+                    extra={'booking_id': booking.id, 'action': 'START_TRANSIT'}
+                )
                 return success_response(data=BookingSerializer(booking).data, message="Transit started")
 
             elif action in ['ARRIVED', 'FLIGHT_LANDED']:
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can mark arrived")
                 booking = BookingWorkflowService.update_transit_status(booking, 'ARRIVED')
+                # Notify Sender only
+                MultiLevelNotificationEngine.send_user_notification(
+                    user=booking.sender,
+                    title='Traveler Arrived 🛬',
+                    message=f'Traveler has arrived at the destination with parcel "{booking.package_name}". Prepare for handover.',
+                    notif_type='booking',
+                    extra={'booking_id': booking.id, 'action': 'ARRIVED'}
+                )
                 return success_response(data=BookingSerializer(booking).data, message="Flight arrived")
 
             elif action == 'OUT_FOR_DELIVERY':
@@ -192,6 +304,14 @@ class BookingActionView(views.APIView):
                 
                 booking = BookingWorkflowService.update_transit_status(booking, 'OUT_FOR_DELIVERY')
                 
+                # Notify Sender only
+                MultiLevelNotificationEngine.send_user_notification(
+                    user=booking.sender,
+                    title='Out for Delivery 🚚 OTP Generated',
+                    message=f'Your parcel "{booking.package_name}" is out for delivery! Give OTP {booking.delivery_otp} to traveler at handover.',
+                    notif_type='booking',
+                    extra={'booking_id': booking.id, 'action': 'OUT_FOR_DELIVERY', 'otp': booking.delivery_otp}
+                )
                 BookingWorkflowService.trigger_websocket_notification(
                     booking, 'otp_generated', f"OTP for Booking #{booking.id} has been generated."
                 )
@@ -221,7 +341,11 @@ class BookingActionView(views.APIView):
             return failure_response(message="Invalid action name")
             
         except ValueError as e:
+            logger.warning(f"Booking action ValueError: {e}")
             return failure_response(message=str(e))
+        except Exception as e:
+            logger.error(f"Booking action {action} failed: {e}", exc_info=True)
+            return failure_response(message=f"Action failed: {str(e)}")
 
 
 class MatchTravellerListView(generics.ListAPIView):

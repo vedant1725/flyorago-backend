@@ -51,6 +51,49 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         model = User
         fields = ('email', 'password', 'first_name', 'last_name', 'phone_number', 'role')
 
+    def validate_email(self, value):
+        import re
+        email = value.strip().lower()
+
+        # Reject common throwaway/disposable spam domains
+        disposable_domains = {
+            'tempmail.com', '10minutemail.com', 'guerrillamail.com', 'throwawaymail.com',
+            'mailinator.com', 'yopmail.com.trash', 'fakeinbox.com', 'trashmail.com'
+        }
+        domain = email.split('@')[-1] if '@' in email else ''
+        if domain in disposable_domains:
+            raise serializers.ValidationError("Disposable and temporary email addresses are not allowed for security reasons.")
+
+        # Standard RFC email pattern
+        email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+        if not re.match(email_regex, email):
+            raise serializers.ValidationError("Please provide a valid official email address format.")
+
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError("An account with this email address already exists. Please log in.")
+
+        return email
+
+    def validate_phone_number(self, value):
+        import re
+        if not value:
+            return value
+        phone = re.sub(r'[\s\-\(\)]', '', str(value))
+        
+        # Must be valid E.164 phone format (+ followed by 8 to 15 digits)
+        if not re.match(r'^\+[1-9]\d{7,14}$', phone):
+            raise serializers.ValidationError("Please provide a valid international phone number in format +[country code][number] (e.g. +919876543210).")
+
+        # Reject obvious fake numbers (all same digits like +910000000000, +911111111111)
+        digits_only = re.sub(r'\D', '', phone)
+        if len(set(digits_only[2:])) <= 1:
+            raise serializers.ValidationError("Invalid or sequential fake mobile number detected. Please enter your real phone number.")
+
+        if User.objects.filter(phone_number=phone).exists():
+            raise serializers.ValidationError("This phone number is already registered with another account.")
+
+        return phone
+
     def validate_password(self, value):
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError

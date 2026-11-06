@@ -59,7 +59,28 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                     message="No account found with this email address. Please check your email or sign up."
                 )
 
-            # ── Step 2: Check if account is active (blocked by admin) ──────
+            # ── Step 2: Check if account is active or temporarily locked out ──
+            now = timezone.now()
+            if diag_user.lockout_until and diag_user.lockout_until > now:
+                remaining_mins = max(1, int((diag_user.lockout_until - now).total_seconds() / 60))
+                print(f"LOGIN DEBUG - User '{email}' is TEMPORARILY LOCKED OUT for {remaining_mins} more minutes.")
+                SecurityLogger.log_event('LOGIN', user=diag_user, status='FAILURE', description=f'Temporary locked out user login attempt: {email}', ip_address=ip, user_agent=ua)
+                return failure_response(
+                    errors={
+                        "error_code": "ACCOUNT_LOCKED_TEMPORARY",
+                        "remaining_minutes": remaining_mins,
+                        "lockout_until": diag_user.lockout_until.isoformat()
+                    },
+                    message=f"Too many failed login attempts. Your account has been temporarily blocked for 1 hour for security. Please try again in {remaining_mins} minutes or reset your password.",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
+
+            # Auto-unblock if lockout expired
+            if diag_user.lockout_until and diag_user.lockout_until <= now:
+                diag_user.lockout_until = None
+                diag_user.failed_login_attempts = 0
+                diag_user.save(update_fields=['lockout_until', 'failed_login_attempts'])
+
             if not diag_user.is_active:
                 print(f"LOGIN DEBUG - User '{email}' EXISTS but is BLOCKED (is_active=False)")
                 SecurityLogger.log_event('LOGIN', user=diag_user, status='FAILURE', description=f'Blocked user login attempt: {email}', ip_address=ip, user_agent=ua)
@@ -68,16 +89,53 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                     message="Your account has been suspended by an administrator. Please contact support."
                 )
 
-            # ── Step 3: Password Verification ──────────────────────────────
+            # ── Step 3: Password Verification & Brute-Force Tracker ──────────
             password = request.data.get('password', '')
             if not diag_user.check_password(password):
-                print(f"LOGIN DEBUG - User '{email}' EXISTS but password check FAILED.")
-                SecurityLogger.log_event('LOGIN', user=diag_user, status='FAILURE', description=f'Incorrect password login attempt: {email}', ip_address=ip, user_agent=ua)
+                diag_user.failed_login_attempts = (diag_user.failed_login_attempts or 0) + 1
+                attempts_left = max(0, 3 - diag_user.failed_login_attempts)
+
+                if diag_user.failed_login_attempts >= 3:
+                    # Lock user out for exactly 1 hour
+                    diag_user.lockout_until = now + timedelta(hours=1)
+                    diag_user.save(update_fields=['failed_login_attempts', 'lockout_until'])
+
+                    # Notify user via security email
+                    try:
+                        from notifications.email_service.service import EmailService
+                        EmailService.send_account_restricted(diag_user)
+                    except Exception as email_e:
+                        print("Lockout email warning:", email_e)
+
+                    SecurityLogger.log_event('LOGIN', user=diag_user, status='FAILURE', description=f'User locked out for 1 hour (3 failed attempts): {email}', ip_address=ip, user_agent=ua)
+                    return failure_response(
+                        errors={
+                            "error_code": "ACCOUNT_LOCKED_TEMPORARY",
+                            "remaining_minutes": 60,
+                            "lockout_until": diag_user.lockout_until.isoformat()
+                        },
+                        message="Incorrect password. You have entered the wrong password 3 times. Your account is now locked for 1 hour for your security.",
+                        status_code=status.HTTP_403_FORBIDDEN
+                    )
+
+                diag_user.save(update_fields=['failed_login_attempts'])
+                print(f"LOGIN DEBUG - User '{email}' EXISTS but password check FAILED. Attempt #{diag_user.failed_login_attempts}")
+                SecurityLogger.log_event('LOGIN', user=diag_user, status='FAILURE', description=f'Incorrect password login attempt ({diag_user.failed_login_attempts}/3): {email}', ip_address=ip, user_agent=ua)
                 return failure_response(
-                    errors={"error_code": "WRONG_PASSWORD"},
-                    message="Incorrect password. Please try again.",
+                    errors={
+                        "error_code": "WRONG_PASSWORD",
+                        "failed_attempts": diag_user.failed_login_attempts,
+                        "attempts_remaining": attempts_left
+                    },
+                    message=f"Incorrect password. You have {attempts_left} attempt{'s' if attempts_left != 1 else ''} remaining before your account is locked for 1 hour.",
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
+
+            # Reset failed attempts upon successful password verification
+            if diag_user.failed_login_attempts > 0 or diag_user.lockout_until:
+                diag_user.failed_login_attempts = 0
+                diag_user.lockout_until = None
+                diag_user.save(update_fields=['failed_login_attempts', 'lockout_until'])
 
             # ── Step 4: Generate JWT Tokens & Build Response ──────────────
             try:
@@ -168,13 +226,13 @@ class UserRegisterView(views.APIView):
                 user.otp_expires_at = timezone.now() + timedelta(minutes=10)
                 user.save()
 
-                # Trigger non-blocking email notifications
+                # Trigger non-blocking email notifications via Resend
                 try:
-                    from notifications.email_service import EmailService
+                    from notifications.email_service.service import EmailService
                     EmailService.send_welcome(user)
                     EmailService.send_verification_otp(user, otp)
                 except Exception as email_err:
-                    pass
+                    print("Registration email dispatch warning:", email_err)
 
                 # Generate JWT tokens for the newly registered user
                 from rest_framework_simplejwt.tokens import RefreshToken
@@ -234,11 +292,15 @@ class RequestOTPView(views.APIView):
                 user.otp_expires_at = timezone.now() + timedelta(minutes=10)
                 user.save()
 
+                purpose = request.data.get('purpose', 'verification')
                 try:
-                    from notifications.email_service import EmailService
-                    EmailService.send_verification_otp(user, otp)
+                    from notifications.email_service.service import EmailService
+                    if purpose == 'password_reset':
+                        EmailService.send_password_reset_otp(user, otp)
+                    else:
+                        EmailService.send_verification_otp(user, otp)
                 except Exception as email_err:
-                    pass
+                    print("Request OTP email warning:", email_err)
 
                 response_data = {}
                 if settings.DEBUG:
@@ -274,8 +336,28 @@ class VerifyOTPView(views.APIView):
                 user.otp_code = None
                 user.otp_expires_at = None
                 user.save()
+
+                # Generate new JWT tokens upon successful OTP verification
+                from rest_framework_simplejwt.tokens import RefreshToken
+                refresh = RefreshToken.for_user(user)
+                refresh['role'] = getattr(user, 'role', 'user')
+                refresh['email'] = user.email
+                refresh['is_verified'] = True
+
+                data = {
+                    'userId': str(user.id),
+                    'email': user.email,
+                    'fullName': f"{user.first_name} {user.last_name}".strip() or user.email.split('@')[0],
+                    'role': getattr(user, 'role', 'user'),
+                    'is_verified': True,
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token)
+                    }
+                }
+
                 SecurityLogger.log_event('OTP_VERIFY', user=user, status='SUCCESS', description=f'OTP verified successfully: {email}', ip_address=ip, user_agent=ua)
-                return success_response(message="Account verified successfully")
+                return success_response(data=data, message="Account verified successfully")
             
             SecurityLogger.log_event('OTP_VERIFY', user=user, status='FAILURE', description=f'Invalid/expired OTP verification attempt: {email}', ip_address=ip, user_agent=ua)
             return failure_response(message="Invalid or expired OTP code")
@@ -304,6 +386,8 @@ class ResetPasswordView(views.APIView):
                 user.set_password(new_password)
                 user.otp_code = None
                 user.otp_expires_at = None
+                user.failed_login_attempts = 0
+                user.lockout_until = None
                 user.save()
                 SecurityLogger.log_event('PASSWORD_RESET', user=user, status='SUCCESS', description=f'Password reset successful: {email}', ip_address=ip, user_agent=ua)
                 return success_response(message="Password reset successfully")

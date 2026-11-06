@@ -26,8 +26,10 @@ class TripListCreateView(generics.ListCreateAPIView):
         elif user_only:
             queryset = queryset.filter(user=self.request.user)
         else:
-            # Senders search active trips
+            # Senders search active trips - strictly exclude self-matching
             queryset = queryset.filter(status='Active')
+            if self.request.user and self.request.user.is_authenticated:
+                queryset = queryset.exclude(user=self.request.user)
 
         # Filter criteria
         from_loc = self.request.query_params.get('from')

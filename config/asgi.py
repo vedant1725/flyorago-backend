@@ -22,10 +22,14 @@ from channels.auth import AuthMiddlewareStack
 websocket_urlpatterns = []
 
 try:
-    from messages.routing import websocket_urlpatterns as msg_patterns
-    websocket_urlpatterns.extend(msg_patterns)
+    from chat.routing import websocket_urlpatterns as chat_patterns
+    websocket_urlpatterns.extend(chat_patterns)
 except ImportError:
-    pass
+    try:
+        from messages.routing import websocket_urlpatterns as msg_patterns
+        websocket_urlpatterns.extend(msg_patterns)
+    except ImportError:
+        pass
 
 try:
     from notifications.routing import websocket_urlpatterns as notif_patterns

@@ -3,15 +3,15 @@ from rest_framework import permissions
 class IsKYCApproved(permissions.BasePermission):
     """
     Permission check for KYC status:
-    - Safe HTTP methods (GET, HEAD, OPTIONS) are allowed.
-    - Unsafe HTTP methods (POST, PUT, PATCH, DELETE) require active user access.
-    - Explicitly REJECTED accounts are blocked from performing transactions.
-    - Admins, staff, and verified/active members are allowed.
+    - Safe HTTP methods (GET, HEAD, OPTIONS) are allowed so users can browse dashboard, trips, etc.
+    - Unsafe HTTP methods (POST, PUT, PATCH, DELETE) STRICTLY REQUIRE profile.kyc_status == 'APPROVED'.
+    - Users with KYC status NOT_SUBMITTED, PENDING, UNDER_REVIEW, or REJECTED cannot create trips, bookings, shipments, or execute payments.
+    - Admins and staff are exempt.
     """
-    message = "Your KYC verification was rejected or restricted. Please contact support or re-submit valid ID documents."
+    message = "KYC approval is strictly required to perform this action. Your identity verification is either pending, rejected, or not submitted."
 
     def has_permission(self, request, view):
-        # Allow read/view access for safe methods
+        # Allow read/view access for safe methods (Dashboard, viewing trips, notifications, etc.)
         if request.method in permissions.SAFE_METHODS:
             return True
 
@@ -26,9 +26,9 @@ class IsKYCApproved(permissions.BasePermission):
         # Check user profile KYC status
         profile = getattr(user, 'profile', None)
         if not profile:
-            return True  # Allow active authenticated user if profile has not populated yet
+            return False
 
-        return profile.kyc_status != 'REJECTED'
+        return profile.kyc_status == 'APPROVED'
 
 
 class IsSystemAdmin(permissions.BasePermission):

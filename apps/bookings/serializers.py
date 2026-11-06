@@ -12,6 +12,7 @@ class BookingSerializer(serializers.ModelSerializer):
     route = serializers.SerializerMethodField()
     sender = serializers.SerializerMethodField()
     traveler = serializers.SerializerMethodField()
+    receiver = serializers.SerializerMethodField()
     createdAt = serializers.SerializerMethodField()
     paymentStatus = serializers.CharField(source='payment_status', read_only=True)
     escrow = serializers.SerializerMethodField()
@@ -23,11 +24,45 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'sender_name', 'traveler_name', 'trip', 'sender_trip',
             'package_name', 'package_category', 'package_image',
+            'receiver_name', 'receiver_address', 'receiver_phone', 'delivery_date',
             'weight', 'reward', 'trip_price_per_kg', 'status', 'payment_status', 'escrow_status', 'delivery_otp',
             'created_at', 'updated_at',
-            'package', 'route', 'sender', 'traveler',
+            'package', 'route', 'sender', 'traveler', 'receiver',
             'createdAt', 'paymentStatus', 'escrow', 'accepted_parcel_types'
         )
+
+    def get_receiver(self, obj) -> dict:
+        name = (obj.receiver_name or '').strip()
+        phone = (obj.receiver_phone or '').strip()
+        address = (obj.receiver_address or '').strip()
+
+        # Check sender_trip fallback if any field is missing
+        if obj.sender_trip:
+            if not name and obj.sender_trip.terminal_from and obj.sender_trip.terminal_from != 'N/A':
+                name = obj.sender_trip.terminal_from.strip()
+            if not phone and obj.sender_trip.terminal_to and obj.sender_trip.terminal_to != 'N/A':
+                phone = obj.sender_trip.terminal_to.strip()
+            if not address and obj.sender_trip.to_location:
+                address = obj.sender_trip.to_location.strip()
+            if obj.sender_trip.notes:
+                try:
+                    import json
+                    data = json.loads(obj.sender_trip.notes)
+                    if isinstance(data, dict):
+                        if not name:
+                            name = (data.get('receiver_name') or data.get('receiverName') or '').strip()
+                        if not phone:
+                            phone = (data.get('receiver_phone') or data.get('receiverPhone') or '').strip()
+                        if not address:
+                            address = (data.get('receiver_address') or data.get('receiverAddress') or '').strip()
+                except Exception:
+                    pass
+
+        return {
+            'name': name or (f"{obj.sender.first_name}'s Contact" if (obj.sender and obj.sender.first_name) else 'Designated Receiver'),
+            'phone': phone,
+            'address': address or (obj.trip.to_location if obj.trip else 'Destination Point')
+        }
 
     def get_delivery_otp(self, obj) -> str:
         try:
@@ -70,7 +105,14 @@ class BookingSerializer(serializers.ModelSerializer):
                 'fromAirport': obj.trip.from_airport or '',
                 'toAirport': obj.trip.to_airport or ''
             }
-        return {'from': 'Unknown', 'to': 'Unknown', 'fromAirport': '', 'toAirport': ''}
+        if hasattr(obj, 'shipment') and obj.shipment:
+            return {
+                'from': obj.shipment.pickup_address or 'Origin',
+                'to': obj.shipment.delivery_address or 'Destination',
+                'fromAirport': '',
+                'toAirport': ''
+            }
+        return {'from': 'Origin', 'to': 'Destination', 'fromAirport': '', 'toAirport': ''}
 
     def get_sender(self, obj) -> dict:
         if not obj.sender:
@@ -91,8 +133,12 @@ class BookingSerializer(serializers.ModelSerializer):
 
 
     def get_traveler(self, obj) -> dict:
+        if not obj.traveler:
+            return {'id': '', 'name': 'Not Assigned Yet', 'email': '', 'city': 'Traveler'}
         return {
+            'id': str(obj.traveler.id),
             'name': f"{obj.traveler.first_name} {obj.traveler.last_name}".strip() or obj.traveler.email.split('@')[0],
+            'email': obj.traveler.email,
             'city': 'Traveler'
         }
 
@@ -103,10 +149,13 @@ class BookingSerializer(serializers.ModelSerializer):
         return obj.escrow_status or 'Inactive'
 
 class BookingCreateSerializer(serializers.ModelSerializer):
+    trip = serializers.PrimaryKeyRelatedField(queryset=Trip.objects.all(), required=False, allow_null=True)
+
     class Meta:
         model = Booking
         fields = (
             'trip', 'sender_trip', 'package_name', 'package_category', 'package_image',
+            'receiver_name', 'receiver_address', 'receiver_phone', 'delivery_date',
             'weight', 'reward'
         )
 
@@ -114,14 +163,14 @@ class BookingCreateSerializer(serializers.ModelSerializer):
         trip = attrs.get('trip')
         weight = attrs.get('weight')
         
-        if trip.available_weight < weight:
+        if trip and trip.available_weight < weight:
             raise serializers.ValidationError("Booking weight exceeds trip available space allowance.")
         return attrs
 
 class BookingActionRequestSerializer(serializers.Serializer):
     action = serializers.ChoiceField(
         choices=[
-            'ACCEPT', 'REJECT', 'CANCEL', 
+            'ACCEPT', 'Accept', 'REJECT', 'Reject', 'CANCEL', 'PAY', 'ARRIVED', 'IN_TRANSIT', 
             'MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW',
             'SCHEDULE_PICKUP',
             'VERIFY_PARCEL',

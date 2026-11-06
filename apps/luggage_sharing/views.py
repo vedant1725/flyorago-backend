@@ -4,10 +4,11 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from common.permissions import IsSystemAdmin
+from common.permissions import IsSystemAdmin, IsKYCApproved
 from django.db.models import Sum, Q, Avg
 from django.utils import timezone
 from notifications.models import Notification
+from notifications.services import MultiLevelNotificationEngine
 
 from .models import (
     LuggageListing, LuggageBooking, LuggageVerification,
@@ -67,7 +68,7 @@ class LuggageDashboardView(APIView):
 
 
 class LuggageListingListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsKYCApproved]
 
     def get(self, request):
         mode = request.query_params.get('mode', 'my')
@@ -214,7 +215,7 @@ class LuggageSearchMatchingView(APIView):
 
 
 class LuggageBookingListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsKYCApproved]
 
     def get(self, request):
         role = request.query_params.get('role', 'all')
@@ -269,7 +270,7 @@ class LuggageBookingListCreateView(APIView):
             notes=notes
         )
 
-        Notification.objects.create(
+        MultiLevelNotificationEngine.send_user_notification(
             user=listing.owner,
             title='Luggage Sharing Request Received',
             message=f'{request.user.get_full_name() or request.user.email} sent a request for {booked_weight}kg on {listing.airline} {listing.flight_number}.',
@@ -308,7 +309,7 @@ class LuggageBookingActionView(APIView):
             listing.currently_used_weight += booking.booked_weight
             listing.save()
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.booker,
                 title='Luggage Request Approved',
                 message=f'Your luggage request for {booking.booked_weight}kg has been approved! Proceed to payment.',
@@ -324,7 +325,7 @@ class LuggageBookingActionView(APIView):
             if booking.escrow_status == 'HELD':
                 process_luggage_escrow_refund(booking)
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.booker,
                 title='Luggage Request Rejected',
                 message=f'Your luggage request for booking #{booking.id} was declined.'
@@ -342,7 +343,7 @@ class LuggageBookingActionView(APIView):
 
             process_luggage_escrow_hold(booking)
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.owner,
                 title='Luggage Payment Received',
                 message=f'Payment of ${booking.total_price} for Booking #{booking.id} has been secured in escrow.'
@@ -375,7 +376,7 @@ class LuggageBookingActionView(APIView):
                 booking.status = 'VERIFICATION_REJECTED'
             booking.save()
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.booker,
                 title='Luggage Verified',
                 message=f'Luggage for Booking #{booking.id} was verified by traveller.',
@@ -395,7 +396,7 @@ class LuggageBookingActionView(APIView):
                 notes='Luggage checked in and flight in transit.'
             )
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.booker,
                 title='Luggage In Transit',
                 message=f'Booking #{booking.id} is now in transit.',
@@ -415,7 +416,7 @@ class LuggageBookingActionView(APIView):
                 notes='Flight arrived at destination airport.'
             )
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.booker,
                 title='Traveller Arrived',
                 message=f'Traveller has arrived for Booking #{booking.id}. Please present your QR or OTP for pickup.',
@@ -445,7 +446,7 @@ class LuggageBookingActionView(APIView):
 
             process_luggage_escrow_release(booking)
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.owner,
                 title='Sharing Completed & Payment Released 🎉',
                 message=f'Booking #{booking.id} QR verified! ${booking.total_price} released to your wallet.'
@@ -473,7 +474,7 @@ class LuggageBookingActionView(APIView):
 
             process_luggage_escrow_release(booking)
 
-            Notification.objects.create(
+            MultiLevelNotificationEngine.send_user_notification(
                 user=booking.owner,
                 title='Sharing Completed & Payment Released 🎉',
                 message=f'Booking #{booking.id} OTP verified! ${booking.total_price} released to your wallet.'

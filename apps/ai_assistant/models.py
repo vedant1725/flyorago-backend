@@ -19,6 +19,7 @@ class AIKnowledgeBaseItem(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        app_label = 'ai_assistant'
         ordering = ['-created_at']
 
     def __str__(self):

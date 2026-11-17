@@ -26,6 +26,10 @@ if not SECRET_KEY:
         raise ValueError("The SECRET_KEY environment variable must be set in production.")
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+if 'testserver' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('testserver')
+if '*' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('*')
 
 # Custom User Model
 AUTH_USER_MODEL = 'users.User'
@@ -117,7 +121,7 @@ if raw_db_url:
     DATABASES = {
         "default": dj_database_url.parse(
             raw_db_url,
-            conn_max_age=600,
+            conn_max_age=env.int('CONN_MAX_AGE', default=0),
             conn_health_checks=True,
             ssl_require=True,
         )
@@ -421,4 +425,8 @@ SITE_URL = env('SITE_URL', default='https://flyorago.me')
 # Max payload size for Base64 image uploads (50MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
 FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+
+# Google OAuth Client
+GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID', default='1086456796372-b5dijct15asf51gsb9tf4rhdfnnnj58c.apps.googleusercontent.com')
+
 

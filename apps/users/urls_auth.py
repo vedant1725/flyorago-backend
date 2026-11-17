@@ -6,13 +6,15 @@ from .views import (
     RequestOTPView,
     VerifyOTPView,
     ResetPasswordView,
-    UserMeView
+    UserMeView,
+    GoogleLoginView
 )
 
 urlpatterns = [
     path('register/', UserRegisterView.as_view(), name='auth_register'),
     path("signup/", UserRegisterView.as_view(), name="auth_signup"),
     path('login/', CustomTokenObtainPairView.as_view(), name='auth_login'),
+    path('google/', GoogleLoginView.as_view(), name='auth_google'),
     path('refresh/', CustomTokenRefreshView.as_view(), name='auth_refresh'),
     path('request-otp/', RequestOTPView.as_view(), name='auth_request_otp'),
     path('verify-otp/', VerifyOTPView.as_view(), name='auth_verify_otp'),

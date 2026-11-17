@@ -226,11 +226,77 @@ class BookingWorkflowService:
         return booking
 
     @staticmethod
-    def upload_verification(booking):
-        if booking.status != 'PAID':
-            raise ValueError(f"Cannot verify parcel from status {booking.status}")
+    def upload_verification(booking, images=None):
+        allowed_statuses = [
+            'PAID', 'Payment Completed', 'Parcel Verification', 'Pickup Scheduled',
+            'ACCEPTED', 'PARCEL_VERIFIED', 'Traveller Accepted', 'Ready For Transit'
+        ]
+        is_paid = booking.payment_status in ['Escrow Hold', 'PAID', 'Released'] or booking.status in allowed_statuses
+        if not is_paid and booking.status not in allowed_statuses:
+            raise ValueError(f"Cannot verify parcel from status {booking.status}. Payment must be completed first.")
             
         booking.status = 'PARCEL_VERIFIED'
+
+        # Persist verification images if provided
+        if images and isinstance(images, (list, tuple)):
+            import os, base64, uuid
+            from django.conf import settings
+            from shipments.models import Shipment, ShipmentImage
+
+            pickup = getattr(booking.sender_trip, 'from_location', None) or (getattr(booking.trip, 'from_location', None) if booking.trip else 'Pickup Point')
+            delivery = getattr(booking.sender_trip, 'to_location', None) or (getattr(booking.trip, 'to_location', None) if booking.trip else 'Delivery Point')
+
+            shipment, _ = Shipment.objects.get_or_create(
+                booking=booking,
+                defaults={
+                    'status': 'Package Received',
+                    'pickup_address': pickup or 'Pickup Point',
+                    'delivery_address': delivery or 'Delivery Point',
+                    'category': getattr(booking, 'package_category', 'General') or 'General',
+                }
+            )
+
+            media_dir = os.path.join(settings.MEDIA_ROOT, 'verifications')
+            os.makedirs(media_dir, exist_ok=True)
+
+            first_saved_url = None
+            for idx, img_str in enumerate(images[:5]):
+                if not img_str or not isinstance(img_str, str):
+                    continue
+                file_url = None
+                if img_str.startswith('data:image'):
+                    try:
+                        header, data_str = img_str.split(';base64,')
+                        ext = 'jpg'
+                        if 'png' in header:
+                            ext = 'png'
+                        elif 'webp' in header:
+                            ext = 'webp'
+                        
+                        img_bytes = base64.b64decode(data_str)
+                        filename = f"verify_{booking.id}_{uuid.uuid4().hex[:8]}.{ext}"
+                        filepath = os.path.join(media_dir, filename)
+                        with open(filepath, 'wb') as f:
+                            f.write(img_bytes)
+                        file_url = f"/media/verifications/{filename}"
+                    except Exception as e:
+                        print(f"Error saving verification image: {e}")
+                elif img_str.startswith('http') or img_str.startswith('/media/'):
+                    file_url = img_str
+
+                if file_url:
+                    if not first_saved_url:
+                        first_saved_url = file_url
+                    ShipmentImage.objects.create(
+                        shipment=shipment,
+                        image_url=file_url,
+                        image_type='pickup',
+                        is_verification_image=True
+                    )
+
+            if first_saved_url and (not booking.package_image or booking.package_image in ['📦', '[]', '', 'null']):
+                booking.package_image = first_saved_url
+
         booking.save()
         BookingWorkflowService.trigger_websocket_notification(
             booking, 'parcel_verified', f"Parcel for Booking #{booking.id} is verified."
@@ -239,7 +305,7 @@ class BookingWorkflowService:
 
     @staticmethod
     def update_transit_status(booking, new_status):
-        valid_statuses = ['IN_TRANSIT', 'ARRIVED', 'OUT_FOR_DELIVERY']
+        valid_statuses = ['IN_TRANSIT', 'ARRIVED', 'OUT_FOR_DELIVERY', 'In Transit', 'Out For Delivery', 'Flight Landed', 'DELIVERED']
         if new_status not in valid_statuses:
             raise ValueError(f"Invalid transit status: {new_status}")
             

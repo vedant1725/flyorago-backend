@@ -60,8 +60,22 @@ class TripListCreateView(generics.ListCreateAPIView):
             
             # Sync to LuggageListing model
             try:
-                from apps.luggage_sharing.models import LuggageListing
+                from luggage_sharing.models import LuggageListing
                 from decimal import Decimal
+                dep_time = '12:00:00'
+                raw_time = str(trip.departure_time or '').strip()
+                if raw_time:
+                    import re
+                    if re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', raw_time):
+                        parts = raw_time.split(':')
+                        dep_time = f"{int(parts[0]):02d}:{parts[1]}:{parts[2] if len(parts) > 2 else '00'}"
+                    elif 'AM' in raw_time.upper() or 'PM' in raw_time.upper():
+                        from datetime import datetime
+                        try:
+                            dep_time = datetime.strptime(raw_time, '%I:%M %p').strftime('%H:%M:%S')
+                        except Exception:
+                            dep_time = '12:00:00'
+
                 LuggageListing.objects.create(
                     owner=request.user,
                     airline=trip.airline if trip.airline and trip.airline != 'TRAVELER_TRIP' else 'Custom Flight',
@@ -69,7 +83,7 @@ class TripListCreateView(generics.ListCreateAPIView):
                     departure_airport=trip.from_location or 'N/A',
                     arrival_airport=trip.to_location or 'N/A',
                     departure_date=trip.departure_date,
-                    departure_time=trip.departure_time or '12:00:00',
+                    departure_time=dep_time,
                     cabin_class='Economy',
                     max_airline_allowance=trip.available_weight or Decimal('20.00'),
                     currently_used_weight=Decimal('0.00'),

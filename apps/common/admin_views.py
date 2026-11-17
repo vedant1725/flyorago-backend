@@ -808,14 +808,31 @@ class UserDashboardOverviewView(views.APIView):
             pass
 
         notifs_qs = Notification.objects.filter(user=user).order_by('-created_at')[:20]
-        notif_list = [{
-            'id': n.id,
-            'title': n.title,
-            'message': n.message,
-            'is_read': n.is_read,
-            'created_at': n.created_at.isoformat(),
-            'type': getattr(n, 'type', 'general')
-        } for n in notifs_qs]
+        notif_list = []
+        try:
+            for n in notifs_qs:
+                notif_list.append({
+                    'id': n.id,
+                    'title': n.title,
+                    'message': n.message,
+                    'is_read': n.is_read,
+                    'created_at': n.created_at.isoformat() if n.created_at else '',
+                    'type': getattr(n, 'type', 'general')
+                })
+        except Exception as e:
+            print("ERROR IN NOTIFS SERIALIZATION:", e)
+
+        trips_data = []
+        try:
+            trips_data = TripSerializer(trips_qs, many=True).data
+        except Exception as e:
+            print("ERROR IN TRIPS SERIALIZATION:", e)
+
+        bookings_data = []
+        try:
+            bookings_data = BookingSerializer(bookings_qs, many=True).data
+        except Exception as e:
+            print("ERROR IN BOOKINGS SERIALIZATION:", e)
 
         return success_response(
             data={
@@ -824,8 +841,8 @@ class UserDashboardOverviewView(views.APIView):
                     'name': f"{user.first_name} {user.last_name}".strip() or user.email.split('@')[0],
                     'email': user.email,
                 },
-                'trips': TripSerializer(trips_qs, many=True).data,
-                'bookings': BookingSerializer(bookings_qs, many=True).data,
+                'trips': trips_data,
+                'bookings': bookings_data,
                 'trustProfile': trust_data,
                 'kycStatus': kyc_status,
                 'notifications': notif_list,

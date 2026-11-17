@@ -56,19 +56,49 @@ class BookingListCreateView(generics.ListCreateAPIView):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
+        try:
+            from decimal import Decimal
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                return failure_response(errors=serializer.errors, message="Failed to validate booking request")
+
             trip = serializer.validated_data['trip']
+            sender_trip = serializer.validated_data.get('sender_trip')
             weight = serializer.validated_data['weight']
-            
-            # Reduce trip weight
-            trip.available_weight -= weight
-            trip.save()
+
+            # Prevent duplicate active booking requests for the same sender request and trip
+            if sender_trip:
+                existing = Booking.objects.filter(
+                    sender=request.user,
+                    trip=trip,
+                    sender_trip=sender_trip
+                ).exclude(status__in=['CANCELLED', 'REJECTED']).first()
+
+                if existing:
+                    return failure_response(
+                        message="You have already sent a request to this traveler for this parcel.",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Prevent requesting own trip
+            if trip.user == request.user:
+                return failure_response(
+                    message="You cannot send a booking request to your own trip.",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Reduce trip weight safely
+            if trip.available_weight is not None:
+                current_avail = Decimal(str(trip.available_weight))
+                req_weight = Decimal(str(weight))
+                trip.available_weight = max(Decimal('0.00'), current_avail - req_weight)
+                trip.save()
 
             # Automatically calculate reward based on traveler's price_per_kg and parcel weight
             calculated_reward = serializer.validated_data.get('reward', 0)
             if not calculated_reward or calculated_reward == 0:
-                calculated_reward = weight * trip.price_per_kg
+                price = trip.price_per_kg if getattr(trip, 'price_per_kg', None) is not None else Decimal('10.00')
+                calculated_reward = Decimal(str(weight)) * Decimal(str(price))
 
             booking = serializer.save(
                 sender=request.user,
@@ -79,7 +109,10 @@ class BookingListCreateView(generics.ListCreateAPIView):
             
             full_data = BookingSerializer(booking).data
             return success_response(data=full_data, message="Booking request sent successfully", status_code=status.HTTP_201_CREATED)
-        return failure_response(errors=serializer.errors, message="Failed to create booking request")
+        except Exception as e:
+            import logging, traceback
+            logging.getLogger(__name__).error(f"Error creating booking request: {e}\n{traceback.format_exc()}")
+            return failure_response(message=f"Failed to create booking: {str(e)}", status_code=status.HTTP_400_BAD_REQUEST)
 
 class BookingDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -167,8 +200,10 @@ class BookingActionView(views.APIView):
             elif action == 'VERIFY_PARCEL':
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can verify parcel")
-                booking = BookingWorkflowService.upload_verification(booking)
-                return success_response(data=BookingSerializer(booking).data, message="Parcel verified")
+                payload = request.data.get('payload') or {}
+                images = payload.get('images') or request.data.get('images') or []
+                booking = BookingWorkflowService.upload_verification(booking, images=images)
+                return success_response(data=BookingSerializer(booking).data, message="Parcel verified successfully")
 
             elif action == 'START_TRANSIT':
                 if not is_traveler and not is_admin:
@@ -220,8 +255,10 @@ class BookingActionView(views.APIView):
                 
             return failure_response(message="Invalid action name")
             
-        except ValueError as e:
-            return failure_response(message=str(e))
+        except Exception as e:
+            import logging, traceback
+            logging.getLogger(__name__).error(f"Booking action failed for Booking #{booking.id}: {e}\n{traceback.format_exc()}")
+            return failure_response(message=f"Action failed: {str(e)}", status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class MatchTravellerListView(generics.ListAPIView):

@@ -107,3 +107,10 @@ urlpatterns = [
     path('api/matches/find-travellers/<int:shipment_id>/', MatchTravellerListView.as_view(), name='match_travellers_root'),
     path('api/matches/find-shipments/<int:trip_id>/', MatchShipmentListView.as_view(), name='match_shipments_root'),
 ]
+
+from django.conf import settings
+from django.conf.urls.static import static
+
+if settings.MEDIA_ROOT:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

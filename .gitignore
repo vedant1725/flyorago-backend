@@ -124,3 +124,9 @@ html/
 
 # Temp scripts containing sensitive tokens
 push_to_github.ps1
+
+# Keys, media & local virtualenvs
+*.pem
+.venv/
+media/
+client_secret*.json

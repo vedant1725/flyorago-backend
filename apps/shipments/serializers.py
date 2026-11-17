@@ -58,7 +58,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
 class ShipmentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Shipment
-        fields = ('booking', 'pickup_address', 'delivery_address', 'dimensions', 'insurance', 'eta')
+        fields = ('booking', 'pickup_address', 'delivery_address', 'dimensions', 'category', 'description', 'insurance', 'eta')
 
 class ShipmentUpdateStatusRequestSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=[choice[0] for choice in Shipment.STATUS_CHOICES], required=True)

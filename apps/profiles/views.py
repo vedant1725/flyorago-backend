@@ -239,6 +239,25 @@ class KYCAdminActionView(views.APIView):
         )
 
         try:
+            from notifications.services import MultiLevelNotificationEngine
+            if action == 'APPROVE':
+                MultiLevelNotificationEngine.send_user_notification(
+                    user=user,
+                    title='KYC Verification Approved! ✅',
+                    message='Congratulations! Your government identity has been verified. You now have full access to send and carry packages.',
+                    notif_type='trust'
+                )
+            elif action == 'REJECT':
+                MultiLevelNotificationEngine.send_user_notification(
+                    user=user,
+                    title='KYC Verification Update ⚠️',
+                    message=f'Your identity verification needs attention: {profile.kyc_rejection_reason}',
+                    notif_type='trust'
+                )
+        except Exception:
+            pass
+
+        try:
             from notifications.email_service import EmailService
             EmailService.send_kyc_status_update(user, profile.kyc_status, profile.kyc_rejection_reason)
         except Exception as email_err:

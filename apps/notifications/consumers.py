@@ -22,24 +22,37 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         )
 
     # Receive message from room group
+    async def user_notification(self, event):
+        await self.send(text_data=json.dumps(event))
+
     async def payment_secured(self, event):
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
             'type': 'payment_secured',
-            'notification_id': event['notification_id'],
-            'title': event['title'],
-            'message': event['message'],
-            'booking_id': event['booking_id']
+            'notification_id': event.get('notification_id'),
+            'title': event.get('title', '💰 Payment Secured'),
+            'message': event.get('message', 'Escrow funds deposited.'),
+            'booking_id': event.get('booking_id')
         }))
         
     async def new_match(self, event):
         await self.send(text_data=json.dumps({
             'type': 'new_match',
-            'message': event['message']
+            'title': event.get('title', '✨ New Match Found'),
+            'message': event.get('message', '')
         }))
 
     async def booking_status_update(self, event):
-        await self.send(text_data=json.dumps(event))
+        status_name = str(event.get('status', 'Updated')).replace('_', ' ').title()
+        title = event.get('title') or f"Trip & Booking Update: {status_name}"
+        await self.send(text_data=json.dumps({
+            'type': 'booking_status_update',
+            'title': title,
+            'message': event.get('message', f"Booking status has changed to {status_name}."),
+            'event_type': event.get('event_type'),
+            'booking_id': event.get('booking_id'),
+            'status': event.get('status')
+        }))
 
     async def dispute_update(self, event):
         await self.send(text_data=json.dumps(event))

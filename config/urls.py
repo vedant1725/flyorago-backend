@@ -1,3 +1,4 @@
+from trips.location_views import LocationSearchView
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -31,6 +32,8 @@ class RunMigrationsView(APIView):
         return self.get(request)
 
 urlpatterns = [
+    path('api/locations/search/', LocationSearchView.as_view(), name='global_location_search'),
+    path('api/locations/search', LocationSearchView.as_view(), name='global_location_search_noslash'),
     path('api/admin/run-migrations/', RunMigrationsView.as_view(), name='run_migrations'),
     path('', api_root, name='api_root'),
     path('admin/', admin.site.urls),

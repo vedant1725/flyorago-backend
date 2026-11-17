@@ -41,6 +41,20 @@ class NotificationMarkReadSingleView(views.APIView):
         notif.save()
         return success_response(message="Notification marked as read")
 
+class NotificationDeleteSingleView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, pk):
+        notif = get_object_or_404(Notification, pk=pk, user=request.user)
+        notif.delete()
+        return success_response(message="Notification deleted successfully")
+
+class NotificationClearAllView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request):
+        Notification.objects.filter(user=request.user).delete()
+        return success_response(message="All notifications deleted successfully")
 
 class AdminEmailActivityView(views.APIView):
     permission_classes = [IsSystemAdmin]
@@ -64,5 +78,3 @@ class AdminEmailActivityView(views.APIView):
                 'error': l.error or ''
             })
         return success_response(data=data, message="Email activity retrieved successfully")
-
-

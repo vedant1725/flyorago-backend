@@ -290,7 +290,8 @@ class LLMEngine:
     @staticmethod
     def _get_active_db_faqs() -> list:
         try:
-            from .models import AIKnowledgeBaseItem
+            from django.apps import apps
+            AIKnowledgeBaseItem = apps.get_model('ai_assistant', 'AIKnowledgeBaseItem')
             qs = AIKnowledgeBaseItem.objects.filter(is_active=True).values('category', 'question', 'answer', 'is_active')
             return list(qs)
         except Exception as e:

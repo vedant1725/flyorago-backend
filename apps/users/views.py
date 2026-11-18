@@ -435,7 +435,8 @@ class GoogleLoginView(views.APIView):
             idinfo = id_token.verify_oauth2_token(
                 token,
                 google_requests.Request(),
-                audience=google_client_id if google_client_id else None
+                audience=google_client_id if google_client_id else None,
+                clock_skew_in_seconds=30
             )
 
             email = idinfo.get('email')

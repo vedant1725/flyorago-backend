@@ -43,6 +43,11 @@ class Profile(models.Model):
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=5.0)
     trust_score = models.IntegerField(default=50)
 
+    # Account Deletion Request (Admin Workflow)
+    deletion_requested = models.BooleanField(default=False)
+    deletion_requested_at = models.DateTimeField(null=True, blank=True)
+    deletion_reason = models.TextField(null=True, blank=True)
+
     def __str__(self):
         return f"Profile of {self.user.email}"
 

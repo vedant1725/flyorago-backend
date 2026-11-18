@@ -61,6 +61,68 @@ class ProfileMeView(views.APIView):
         user.delete()
         return success_response(message="Your account has been deleted successfully.")
 
+class AccountDeletionRequestView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return success_response(data={
+            'deletion_requested': profile.deletion_requested,
+            'deletion_requested_at': profile.deletion_requested_at.isoformat() if profile.deletion_requested_at else None,
+            'deletion_reason': profile.deletion_reason or '',
+        }, message="Deletion request status")
+
+    def post(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        reason = request.data.get('reason', '').strip()
+        profile.deletion_requested = True
+        profile.deletion_requested_at = timezone.now()
+        profile.deletion_reason = reason
+        profile.save(update_fields=['deletion_requested', 'deletion_requested_at', 'deletion_reason'])
+
+        try:
+            SecurityLogger.log_event(
+                action="ACCOUNT_DELETION_REQUESTED",
+                user=request.user,
+                status="SUCCESS",
+                description=f"User {request.user.email} submitted an account deletion request. Reason: {reason}",
+                ip_address=get_client_ip(request)
+            )
+        except Exception:
+            pass
+
+        return success_response(
+            data={
+                'deletion_requested': True,
+                'deletion_requested_at': profile.deletion_requested_at.isoformat(),
+                'deletion_reason': profile.deletion_reason
+            },
+            message="Your account deletion request has been submitted to the admin team for review."
+        )
+
+    def delete(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile.deletion_requested = False
+        profile.deletion_requested_at = None
+        profile.deletion_reason = None
+        profile.save(update_fields=['deletion_requested', 'deletion_requested_at', 'deletion_reason'])
+
+        try:
+            SecurityLogger.log_event(
+                action="ACCOUNT_DELETION_CANCELLED",
+                user=request.user,
+                status="SUCCESS",
+                description=f"User {request.user.email} cancelled their account deletion request.",
+                ip_address=get_client_ip(request)
+            )
+        except Exception:
+            pass
+
+        return success_response(
+            data={'deletion_requested': False},
+            message="Your account deletion request has been cancelled."
+        )
+
 class AddressListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = AddressSerializer

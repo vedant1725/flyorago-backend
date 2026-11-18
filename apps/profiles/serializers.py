@@ -13,9 +13,13 @@ class ProfileSerializer(serializers.ModelSerializer):
             'id', 'email', 'first_name', 'last_name', 'phone_number',
             'avatar', 'bio', 'languages', 'emergency_contact',
             'pref_fragile', 'pref_electronics', 'pref_documents', 'pref_liquid',
-            'kyc_status', 'kyc_rejection_reason', 'level', 'completed_trips', 'rating'
+            'kyc_status', 'kyc_rejection_reason', 'level', 'completed_trips', 'rating',
+            'deletion_requested', 'deletion_requested_at', 'deletion_reason'
         )
-        read_only_fields = ('id', 'kyc_status', 'kyc_rejection_reason', 'level', 'completed_trips', 'rating')
+        read_only_fields = (
+            'id', 'kyc_status', 'kyc_rejection_reason', 'level', 'completed_trips', 'rating',
+            'deletion_requested', 'deletion_requested_at', 'deletion_reason'
+        )
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', {})

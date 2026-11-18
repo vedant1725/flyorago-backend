@@ -256,8 +256,11 @@ class AdminUsersListView(views.APIView):
                 qs = qs.filter(user__is_active=True)
             elif status_filter.lower() == 'blocked':
                 qs = qs.filter(user__is_active=False)
+            elif status_filter.lower() in ('deletion_requested', 'deletion'):
+                qs = qs.filter(deletion_requested=True)
 
         total_count = qs.count()
+        deletion_requests_count = Profile.objects.filter(deletion_requested=True).count()
         qs = qs.order_by('-user__date_joined')
 
         # Pagination
@@ -282,12 +285,16 @@ class AdminUsersListView(views.APIView):
                 'kycStatus': profile.kyc_status,
                 'trustScore': profile.trust_score,
                 'completedTrips': profile.completed_trips,
+                'deletionRequested': getattr(profile, 'deletion_requested', False),
+                'deletionRequestedAt': profile.deletion_requested_at.isoformat() if getattr(profile, 'deletion_requested_at', None) else None,
+                'deletionReason': getattr(profile, 'deletion_reason', '') or '',
             })
 
         return success_response(
             data={
                 'users': data,
                 'total': total_count,
+                'deletionRequestsCount': deletion_requests_count,
                 'page': page,
                 'pageSize': page_size,
                 'totalPages': (total_count + page_size - 1) // page_size if page_size > 0 else 1
@@ -384,6 +391,15 @@ class AdminUserActionView(views.APIView):
     def patch(self, request, pk):
         try:
             user = User.objects.get(pk=pk)
+
+            if request.data.get('action') == 'reject_deletion' or request.data.get('dismiss_deletion'):
+                if hasattr(user, 'profile'):
+                    user.profile.deletion_requested = False
+                    user.profile.deletion_requested_at = None
+                    user.profile.deletion_reason = None
+                    user.profile.save(update_fields=['deletion_requested', 'deletion_requested_at', 'deletion_reason'])
+                return success_response(message="Account deletion request dismissed.")
+
             fields_to_update = []
             if 'is_active' in request.data:
                 user.is_active = bool(request.data['is_active'])

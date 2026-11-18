@@ -41,6 +41,26 @@ class ProfileMeView(views.APIView):
             return success_response(data=serializer.data, message="Profile updated successfully")
         return failure_response(errors=serializer.errors, message="Failed to update profile")
 
+    def delete(self, request):
+        user = request.user
+        if user.is_staff or user.is_superuser:
+            return failure_response(message="Admin and staff accounts cannot be self-deleted.", status_code=status.HTTP_403_FORBIDDEN)
+        
+        user_email = user.email
+        try:
+            SecurityLogger.log_event(
+                action="USER_SELF_DELETE",
+                user=user,
+                status="SUCCESS",
+                description=f"User {user_email} self-deleted their account.",
+                ip_address=get_client_ip(request)
+            )
+        except Exception:
+            pass
+
+        user.delete()
+        return success_response(message="Your account has been deleted successfully.")
+
 class AddressListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = AddressSerializer

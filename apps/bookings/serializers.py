@@ -16,17 +16,34 @@ class BookingSerializer(serializers.ModelSerializer):
     escrow = serializers.SerializerMethodField()
     accepted_parcel_types = serializers.SerializerMethodField()
     delivery_otp = serializers.SerializerMethodField()
+    trip_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
         fields = (
             'id', 'sender_name', 'traveler_name', 'trip', 'sender_trip',
             'package_name', 'package_category', 'package_image',
+            'receiver_name', 'receiver_phone', 'receiver_address', 'delivery_date',
             'weight', 'reward', 'status', 'payment_status', 'escrow_status', 'delivery_otp',
             'created_at', 'updated_at',
             'package', 'route', 'sender', 'traveler',
-            'createdAt', 'paymentStatus', 'escrow', 'accepted_parcel_types'
+            'createdAt', 'paymentStatus', 'escrow', 'accepted_parcel_types', 'trip_details'
         )
+
+    def get_trip_details(self, obj) -> dict:
+        if not obj.trip:
+            return None
+        return {
+            'id': obj.trip.id,
+            'flight_number': obj.trip.flight_number,
+            'airline': obj.trip.airline,
+            'departure_date': str(obj.trip.departure_date) if obj.trip.departure_date else '',
+            'departure_time': obj.trip.departure_time,
+            'from_location': obj.trip.from_location,
+            'to_location': obj.trip.to_location,
+            'available_weight': str(obj.trip.available_weight),
+            'price_per_kg': str(obj.trip.price_per_kg),
+        }
 
     def get_delivery_otp(self, obj) -> str:
         try:
@@ -97,8 +114,24 @@ class BookingSerializer(serializers.ModelSerializer):
         }
 
     def get_traveler(self, obj) -> dict:
+        if not obj.traveler:
+            return None
+        from profiles.models import Profile
+        traveler_profile = Profile.objects.filter(user=obj.traveler).first()
+        kyc_status = traveler_profile.kyc_status if traveler_profile else 'NOT_SUBMITTED'
+        
+        trip_obj = obj.trip
         return {
+            'id': str(obj.traveler.id),
             'name': f"{obj.traveler.first_name} {obj.traveler.last_name}".strip() or obj.traveler.email.split('@')[0],
+            'email': obj.traveler.email,
+            'phone': getattr(obj.traveler, 'phone_number', '') or '',
+            'flightNo': trip_obj.flight_number if trip_obj else 'FL-782',
+            'airline': trip_obj.airline if trip_obj else 'Commercial Airline',
+            'departureDate': str(trip_obj.departure_date) if (trip_obj and trip_obj.departure_date) else '',
+            'departureTime': trip_obj.departure_time if trip_obj else '12:00:00',
+            'kyc_status': kyc_status,
+            'is_kyc_verified': kyc_status == 'APPROVED',
             'city': 'Traveler'
         }
 
@@ -113,6 +146,7 @@ class BookingCreateSerializer(serializers.ModelSerializer):
         model = Booking
         fields = (
             'trip', 'sender_trip', 'package_name', 'package_category', 'package_image',
+            'receiver_name', 'receiver_phone', 'receiver_address', 'delivery_date',
             'weight', 'reward'
         )
 
@@ -128,11 +162,11 @@ class BookingActionRequestSerializer(serializers.Serializer):
     action = serializers.ChoiceField(
         choices=[
             'ACCEPT', 'REJECT', 'CANCEL', 
-            'MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW',
+            'PAY', 'MARK_PAYMENT_COMPLETED', 'DEPOSIT_ESCROW',
             'SCHEDULE_PICKUP',
             'VERIFY_PARCEL',
             'START_TRANSIT',
-            'FLIGHT_LANDED',
+            'ARRIVED', 'FLIGHT_LANDED',
             'OUT_FOR_DELIVERY',
             'CONFIRM_DELIVERY', 'RELEASE_ESCROW'
         ],

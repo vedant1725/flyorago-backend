@@ -7,7 +7,9 @@ from .views import (
     WithdrawView,
     DepositView,
     EarningsSummaryView,
-    EarningsHistoryView
+    EarningsHistoryView,
+    RazorpayCreateOrderView,
+    RazorpayVerifyPaymentView,
 )
 
 urlpatterns = [
@@ -18,6 +20,10 @@ urlpatterns = [
     path('withdraw', WithdrawView.as_view(), name='wallet_withdraw'),
     path('deposit', DepositView.as_view(), name='wallet_deposit'),
     
+    # Razorpay Endpoints
+    path('razorpay/create-order', RazorpayCreateOrderView.as_view(), name='razorpay_create_order'),
+    path('razorpay/verify', RazorpayVerifyPaymentView.as_view(), name='razorpay_verify'),
+
     # Traveler Earnings
     path('earnings/summary', EarningsSummaryView.as_view(), name='earnings_summary'),
     path('earnings/history', EarningsHistoryView.as_view(), name='earnings_history'),

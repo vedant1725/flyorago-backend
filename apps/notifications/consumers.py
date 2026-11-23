@@ -41,6 +41,15 @@ class NotificationConsumer(AsyncWebsocketConsumer):
     async def booking_status_update(self, event):
         await self.send(text_data=json.dumps(event))
 
+    async def send_notification(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def notification_message(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def delivery_confirmed(self, event):
+        await self.send(text_data=json.dumps(event))
+
     async def dispute_update(self, event):
         await self.send(text_data=json.dumps(event))
 

@@ -20,8 +20,10 @@ class TripSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'created_at', 'available_weight')
 
     def get_bookings_count(self, obj) -> int:
-        # We will retrieve booking count associated with this trip's route/user
-        return obj.bookings.count() if hasattr(obj, 'bookings') else 0
+        if not hasattr(obj, 'bookings'):
+            return 0
+        # Exclude rejected and cancelled bookings
+        return obj.bookings.exclude(status__in=['REJECTED', 'CANCELLED']).count()
 
     def get_progress(self, obj) -> int:
         if obj.capacity_weight <= 0:
@@ -30,6 +32,9 @@ class TripSerializer(serializers.ModelSerializer):
         return int((used / obj.capacity_weight) * 100)
 
 class TripCreateSerializer(serializers.ModelSerializer):
+    arrival_date = serializers.DateField(required=False, allow_null=True)
+    arrival_time = serializers.CharField(required=False, allow_null=True)
+
     class Meta:
         model = Trip
         fields = (
@@ -41,6 +46,12 @@ class TripCreateSerializer(serializers.ModelSerializer):
         )
 
     def create(self, validated_data):
+        # Auto-fill arrival date and time if omitted by mobile or web form
+        if not validated_data.get('arrival_date'):
+            validated_data['arrival_date'] = validated_data.get('departure_date')
+        if not validated_data.get('arrival_time'):
+            validated_data['arrival_time'] = validated_data.get('departure_time') or '12:30:00'
+
         # Default available weight to capacity weight initially
         validated_data['available_weight'] = validated_data.get('capacity_weight', 23.00)
         return super().create(validated_data)

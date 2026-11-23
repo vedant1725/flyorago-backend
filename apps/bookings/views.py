@@ -57,15 +57,27 @@ class BookingListCreateView(generics.ListCreateAPIView):
         if serializer.is_valid():
             trip = serializer.validated_data['trip']
             weight = serializer.validated_data['weight']
+            sender_trip = serializer.validated_data.get('sender_trip')
             
             # Reduce trip weight
             trip.available_weight -= weight
             trip.save()
 
+            # Extract receiver details from sender_trip if not explicitly provided
+            extra_kwargs = {}
+            if sender_trip:
+                if not serializer.validated_data.get('receiver_name') and sender_trip.terminal_from and sender_trip.terminal_from != 'N/A':
+                    extra_kwargs['receiver_name'] = sender_trip.terminal_from
+                if not serializer.validated_data.get('receiver_phone') and sender_trip.terminal_to and sender_trip.terminal_to != 'N/A':
+                    extra_kwargs['receiver_phone'] = sender_trip.terminal_to
+                if not serializer.validated_data.get('receiver_address') and sender_trip.to_location:
+                    extra_kwargs['receiver_address'] = sender_trip.to_location
+
             booking = serializer.save(
                 sender=request.user,
                 traveler=trip.user,
-                status='REQUEST_SENT'
+                status='REQUEST_SENT',
+                **extra_kwargs
             )
             
             full_data = BookingSerializer(booking).data
@@ -152,6 +164,13 @@ class BookingActionView(views.APIView):
             elif action == 'VERIFY_PARCEL':
                 if not is_traveler and not is_admin:
                     return failure_response(message="Only traveler can verify parcel")
+                # Save verification images if provided
+                payload = request.data.get('payload', {})
+                images = payload.get('images', []) if isinstance(payload, dict) else request.data.get('images', [])
+                if images and isinstance(images, list):
+                    import json
+                    booking.package_image = json.dumps(images[:5])
+                    booking.save(update_fields=['package_image'])
                 booking = BookingWorkflowService.upload_verification(booking)
                 return success_response(data=BookingSerializer(booking).data, message="Parcel verified")
 
@@ -183,9 +202,20 @@ class BookingActionView(views.APIView):
                 return success_response(data=BookingSerializer(booking).data, message="Out for delivery. OTP Generated")
 
             elif action == 'CONFIRM_DELIVERY':
-                input_otp = str(request.data.get('otp') or request.data.get('delivery_otp') or '').strip()
-                booking = BookingWorkflowService.complete_delivery(booking, input_otp)
+                raw_input = str(request.data.get('otp') or request.data.get('delivery_otp') or '').strip()
+                # Support QR format prefix FLYORA-OTP-XXXXXX
+                if 'FLYORA-OTP-' in raw_input.upper():
+                    raw_input = raw_input.upper().replace('FLYORA-OTP-', '').strip()
+                booking = BookingWorkflowService.complete_delivery(booking, raw_input)
                 
+                # Check if all bookings for this trip are completed/delivered; if so, mark Trip as Completed!
+                if booking.trip:
+                    trip = booking.trip
+                    other_active = trip.bookings.exclude(status__in=['DELIVERED', 'PAYMENT_RELEASED', 'COMPLETED', 'CANCELLED', 'REJECTED']).exists()
+                    if not other_active:
+                        trip.status = 'Completed'
+                        trip.save(update_fields=['status'])
+
                 # Record completed trip statistics
                 try:
                     profile = booking.traveler.profile

@@ -246,6 +246,27 @@ class BookingWorkflowService:
         except Exception as e:
             print(f"Failed to record platform fee or update wallet escrow: {e}")
         
+        # Deduct from Sender's Available Balance and lock into Sender's Escrow Balance
+        try:
+            reward_amt = booking.reward or 0
+            if reward_amt > 0 and booking.sender:
+                sender_wallet, _ = Wallet.objects.get_or_create(user=booking.sender)
+                # Deduct from available balance if sufficient, else direct lock
+                if sender_wallet.balance_available >= reward_amt:
+                    sender_wallet.balance_available -= reward_amt
+                sender_wallet.balance_escrow += reward_amt
+                sender_wallet.save()
+
+                Transaction.objects.create(
+                    wallet=sender_wallet,
+                    amount=reward_amt,
+                    type='Escrow Hold',
+                    status='Completed',
+                    description=f"₹{reward_amt} locked in Escrow for Booking #{booking.id} ({booking.package_name})"
+                )
+        except Exception as e:
+            print(f"Failed to record sender escrow wallet hold: {e}")
+
         BookingWorkflowService.trigger_websocket_notification(
             booking, 'paid', f"Payment received for Booking #{booking.id}. Funds in escrow."
         )
@@ -445,15 +466,47 @@ class BookingWorkflowService:
         BookingWorkflowService.trigger_websocket_notification(
             booking, 'delivered', f"Booking #{booking.id} has been delivered successfully!"
         )
+
+        # Immediately release escrow into Traveler's wallet and deduct from Sender's escrow vault
+        try:
+            booking = BookingWorkflowService.release_escrow(booking)
+        except Exception as e:
+            print(f"Auto escrow release error: {e}")
+
         return booking
 
     @staticmethod
     def release_escrow(booking):
-        if booking.status != 'DELIVERED':
+        if booking.status not in ['DELIVERED', 'PAYMENT_RELEASED']:
             raise ValueError(f"Cannot release payment for non-delivered booking")
             
-        if booking.escrow_status != 'Active Hold':
-            raise ValueError("No active escrow hold")
+        reward_amt = booking.reward or 0
+
+        # 1. Deduct Escrow from Sender Wallet
+        try:
+            if booking.sender and reward_amt > 0:
+                sender_wallet, _ = Wallet.objects.get_or_create(user=booking.sender)
+                if sender_wallet.balance_escrow >= reward_amt:
+                    sender_wallet.balance_escrow -= reward_amt
+                else:
+                    sender_wallet.balance_escrow = 0
+                sender_wallet.save()
+
+                Transaction.objects.create(
+                    wallet=sender_wallet,
+                    amount=reward_amt,
+                    type='Payment Sent',
+                    status='Completed',
+                    description=f"Escrow Released & Transferred to Traveler for Booking #{booking.id}"
+                )
+        except Exception as se:
+            print(f"Error updating sender wallet escrow release: {se}")
+
+        # 2. Credit Traveler Wallet Available Balance
+        if booking.traveler and reward_amt > 0:
+            traveler_wallet, _ = Wallet.objects.get_or_create(user=booking.traveler)
+            traveler_wallet.balance_available += reward_amt
+            traveler_wallet.save()
             
         from wallet.models import Wallet as WModel, Transaction as TxModel
         from payments.models import SystemSetting, PaymentRecord

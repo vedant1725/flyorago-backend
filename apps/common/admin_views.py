@@ -529,7 +529,11 @@ class AdminDashboardOverviewView(views.APIView):
         from shipments.models import Shipment
         from shipments.serializers import ShipmentSerializer
         from profiles.models import Profile
-        from support.models import Dispute, ContactMessage
+        from support.models import Dispute
+        try:
+            from support.models import ContactMessage
+        except ImportError:
+            ContactMessage = None
 
         period = request.query_params.get('period', 'week')
         now = timezone.now()

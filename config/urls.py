@@ -52,6 +52,10 @@ urlpatterns = [
     path('api/traveler/dashboard-overview/', TravelerDashboardOverviewView.as_view(), name='traveler_dashboard_overview'),
     path('api/user/dashboard-overview/', UserDashboardOverviewView.as_view(), name='user_dashboard_overview'),
 
+    # ── Consolidated High-Performance Overview Endpoints ──
+    path('api/admin/dashboard-overview/', AdminDashboardOverviewView.as_view(), name='admin_dashboard_overview'),
+    path('api/sender/dashboard-overview/', SenderDashboardOverviewView.as_view(), name='sender_dashboard_overview'),
+
     # ── Admin Panel: Stats & Lists & Chart ──
     path('api/admin/stats/', AdminStatsView.as_view(), name='admin_stats'),
     path('api/admin/stats', AdminStatsView.as_view(), name='admin_stats_noslash'),
@@ -78,7 +82,14 @@ urlpatterns = [
     path('api/admin/users/<str:pk>/', AdminUserActionView.as_view(), name='admin_user_action'),
     path('api/admin/users/<str:pk>', AdminUserActionView.as_view(), name='admin_user_action_noslash'),
 
+    # Locations Search (All-India Real-Time Geocoding & Pincode Lookup)
+    path('api/locations/search/', __import__('apps.common.location_views', fromlist=['LocationSearchView']).LocationSearchView.as_view(), name='location_search'),
+
     # Core API Modules
+    path('api/user/dashboard-overview/', include([
+        path('', __import__('apps.users.views', fromlist=['UserDashboardOverviewView']).UserDashboardOverviewView.as_view(), name='user_dashboard_overview'),
+    ])),
+    path('api/traveler/dashboard-overview/', __import__('apps.users.views', fromlist=['UserDashboardOverviewView']).UserDashboardOverviewView.as_view(), name='traveler_dashboard_overview'),
     path('api/auth/', include('users.urls_auth')),
     path('api/profiles/', include('profiles.urls')),
 

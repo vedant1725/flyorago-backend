@@ -19,6 +19,7 @@ class BookingSerializer(serializers.ModelSerializer):
     accepted_parcel_types = serializers.SerializerMethodField()
     delivery_otp = serializers.SerializerMethodField()
     verification_images = serializers.SerializerMethodField()
+    trip_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -30,8 +31,23 @@ class BookingSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
             'package', 'route', 'sender', 'traveler', 'receiver',
             'createdAt', 'paymentStatus', 'escrow', 'accepted_parcel_types',
-            'verification_images'
+            'verification_images', 'trip_details'
         )
+
+    def get_trip_details(self, obj) -> dict:
+        if not obj.trip:
+            return None
+        return {
+            'id': obj.trip.id,
+            'flight_number': obj.trip.flight_number,
+            'airline': obj.trip.airline,
+            'departure_date': str(obj.trip.departure_date) if obj.trip.departure_date else '',
+            'departure_time': obj.trip.departure_time,
+            'from_location': obj.trip.from_location,
+            'to_location': obj.trip.to_location,
+            'available_weight': str(obj.trip.available_weight),
+            'price_per_kg': str(obj.trip.price_per_kg),
+        }
 
     def get_verification_images(self, obj) -> list:
         try:
@@ -163,11 +179,25 @@ class BookingSerializer(serializers.ModelSerializer):
     def get_traveler(self, obj) -> dict:
         if not obj.traveler:
             return {'id': '', 'name': 'Not Assigned Yet', 'email': '', 'city': 'Traveler'}
+        from profiles.models import Profile
+        traveler_profile = Profile.objects.filter(user=obj.traveler).first()
+        kyc_status = traveler_profile.kyc_status if traveler_profile else 'NOT_SUBMITTED'
+        
+        trip_obj = obj.trip
         return {
             'id': str(obj.traveler.id),
             'name': f"{obj.traveler.first_name} {obj.traveler.last_name}".strip() or (obj.traveler.email.split('@')[0] if obj.traveler.email else 'Traveler'),
             'email': obj.traveler.email or '',
-            'city': 'Traveler'
+            'phone': getattr(obj.traveler, 'phone_number', '') or '',
+            'flightNo': trip_obj.flight_number if trip_obj else 'FL-782',
+            'airline': trip_obj.airline if trip_obj else 'Commercial Airline',
+            'departureDate': str(trip_obj.departure_date) if (trip_obj and trip_obj.departure_date) else '',
+            'departureTime': trip_obj.departure_time if trip_obj else '12:00:00',
+            'kyc_status': kyc_status,
+            'is_kyc_verified': kyc_status == 'APPROVED',
+            'rating': float(getattr(obj.traveler, 'rating', 4.9) or 4.9),
+            'avatar': getattr(traveler_profile, 'avatar_url', None) if traveler_profile else None,
+            'city': (traveler_profile.city if traveler_profile and traveler_profile.city else (trip_obj.from_location if trip_obj else 'Traveler'))
         }
 
     def get_createdAt(self, obj) -> str:

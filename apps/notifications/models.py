@@ -19,6 +19,29 @@ class Notification(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new:
+            try:
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f"user_{self.user_id}_notifications",
+                        {
+                            "type": "send_notification",
+                            "notification_id": self.id,
+                            "title": self.title,
+                            "message": self.message,
+                            "category": self.type,
+                            "is_read": self.is_read,
+                        }
+                    )
+            except Exception as e:
+                pass
+
     def __str__(self):
         return f"Notif for {self.user.email}: {self.title} (Read: {self.is_read})"
 

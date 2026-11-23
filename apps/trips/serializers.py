@@ -44,7 +44,9 @@ class TripSerializer(serializers.ModelSerializer):
     def get_bookings_count(self, obj) -> int:
         if hasattr(obj, 'bookings_count_annotated'):
             return obj.bookings_count_annotated
-        return obj.bookings.count() if hasattr(obj, 'bookings') else 0
+        if not hasattr(obj, 'bookings'):
+            return 0
+        return obj.bookings.exclude(status__in=['REJECTED', 'CANCELLED']).count()
 
     def get_progress(self, obj) -> int:
         if not getattr(obj, 'capacity_weight', None) or obj.capacity_weight <= 0:
@@ -105,6 +107,13 @@ class TripCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        # Auto-fill arrival date and time if omitted by mobile or web form
+        if not validated_data.get('arrival_date'):
+            validated_data['arrival_date'] = validated_data.get('departure_date')
+        if not validated_data.get('arrival_time'):
+            validated_data['arrival_time'] = validated_data.get('departure_time') or '12:30:00'
+
+        # Default available weight to capacity weight initially
         if not validated_data.get('available_weight'):
             validated_data['available_weight'] = validated_data.get('capacity_weight', 20.00)
         return super().create(validated_data)

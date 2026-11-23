@@ -215,6 +215,10 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
+# Razorpay Configuration
+RAZORPAY_KEY_ID = env('RAZORPAY_KEY_ID', default='rzp_test_U3ahnywarJuu69')
+RAZORPAY_KEY_SECRET = env('RAZORPAY_KEY_SECRET', default='e2AOEFbBB0tw3wspUe26PjRF')
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 STATIC_URL = 'static/'

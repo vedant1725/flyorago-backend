@@ -197,7 +197,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'is_kyc_verified': kyc_status == 'APPROVED',
             'rating': float(getattr(obj.traveler, 'rating', 4.9) or 4.9),
             'avatar': getattr(traveler_profile, 'avatar_url', None) if traveler_profile else None,
-            'city': (traveler_profile.city if traveler_profile and traveler_profile.city else (trip_obj.from_location if trip_obj else 'Traveler'))
+            'city': (getattr(traveler_profile, 'city', None) or (trip_obj.from_location if trip_obj else 'Traveler'))
         }
 
     def get_createdAt(self, obj) -> str:

@@ -910,7 +910,7 @@ class UserDashboardOverviewView(views.APIView):
 
         user = request.user
         trips_qs = Trip.objects.filter(user=user).select_related('user').order_by('-created_at')
-        bookings_qs = Booking.objects.filter(Q(sender=user) | Q(traveler=user)).select_related('sender', 'traveler', 'trip').order_by('-created_at')
+        bookings_qs = Booking.objects.filter(Q(sender=user) | Q(traveler=user)).select_related('sender', 'traveler', 'trip', 'sender_trip').prefetch_related('shipment__images').order_by('-created_at')
         
         trust_data = {'score': 550, 'level': 'STANDARD', 'activity_logs': []}
         try:

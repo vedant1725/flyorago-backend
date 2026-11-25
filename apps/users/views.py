@@ -143,7 +143,22 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 refresh = RefreshToken.for_user(diag_user)
                 refresh['role'] = getattr(diag_user, 'role', 'user')
                 refresh['email'] = diag_user.email
-                refresh['is_verified'] = getattr(diag_user, 'is_verified', True)
+                is_user_verified = bool(getattr(diag_user, 'is_verified', False))
+                refresh['is_verified'] = is_user_verified
+
+                # If user is not verified, auto-generate fresh OTP and dispatch email right away
+                if not is_user_verified:
+                    try:
+                        otp = str(secrets.SystemRandom().randint(100000, 999999))
+                        diag_user.otp_code = otp
+                        diag_user.otp_expires_at = timezone.now() + timedelta(minutes=10)
+                        diag_user.save(update_fields=['otp_code', 'otp_expires_at'])
+
+                        from notifications.email_service.service import EmailService
+                        EmailService.send_verification_otp(diag_user, otp)
+                        print(f"LOGIN DEBUG - Dispatched fresh verification OTP to unverified user: {diag_user.email}")
+                    except Exception as otp_send_err:
+                        print("LOGIN DEBUG - Failed dispatching OTP email on login:", otp_send_err)
 
                 tokens = {
                     'refresh': str(refresh),
@@ -159,14 +174,16 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
                 user_dict['userId'] = str(diag_user.id)
                 user_dict['fullName'] = f"{diag_user.first_name} {diag_user.last_name}".strip() or diag_user.email.split('@')[0]
+                user_dict['is_verified'] = is_user_verified
 
                 data = {
                     'tokens': tokens,
                     'user': user_dict,
                     'userId': str(diag_user.id),
-                    'fullName': user_dict['fullName']
+                    'fullName': user_dict['fullName'],
+                    'is_verified': is_user_verified,
                 }
-                print("LOGIN DEBUG - SUCCESS for:", diag_user.email)
+                print("LOGIN DEBUG - SUCCESS for:", diag_user.email, "is_verified:", is_user_verified)
                 SecurityLogger.log_event('LOGIN', user=diag_user, status='SUCCESS', description=f'Login successful: {email}', ip_address=ip, user_agent=ua)
                 return success_response(data=data, message="Login successful")
             except Exception as response_err:
@@ -410,4 +427,105 @@ class UserMeView(views.APIView):
             serializer.save()
             return success_response(data=serializer.data, message="User profile updated")
         return failure_response(errors=serializer.errors, message="Failed to update profile")
+
+
+class GoogleLoginView(views.APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_scope = 'sensitive'
+
+    def post(self, request):
+        token = request.data.get('credential') or request.data.get('token')
+        if not token:
+            return failure_response(message="Google credential token is required", status_code=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from google.oauth2 import id_token
+            from google.auth.transport import requests as google_requests
+            from django.contrib.auth import get_user_model
+            from rest_framework_simplejwt.tokens import RefreshToken
+            from profiles.models import Profile
+            from wallet.models import Wallet
+
+            User = get_user_model()
+
+            google_client_id = getattr(settings, 'GOOGLE_CLIENT_ID', None)
+            idinfo = id_token.verify_oauth2_token(
+                token,
+                google_requests.Request(),
+                audience=google_client_id if google_client_id else None,
+                clock_skew_in_seconds=30
+            )
+
+            email = idinfo.get('email')
+            if not email:
+                return failure_response(message="Invalid Google token: email not found", status_code=status.HTTP_400_BAD_REQUEST)
+
+            name = idinfo.get('name', '')
+            picture = idinfo.get('picture', '')
+            given_name = idinfo.get('given_name', '')
+            family_name = idinfo.get('family_name', '')
+
+            user = User.objects.filter(email__iexact=email).first()
+            if not user:
+                user = User.objects.create_user(
+                    email=email,
+                    first_name=given_name or name or email.split('@')[0],
+                    last_name=family_name or '',
+                    is_verified=True,
+                    role='sender'
+                )
+                user.set_unusable_password()
+                user.save()
+
+                profile, _ = Profile.objects.get_or_create(user=user)
+                if picture and not profile.profile_image:
+                    profile.profile_image = picture
+                    profile.save()
+                Wallet.objects.get_or_create(user=user)
+            else:
+                if not user.is_active:
+                    return failure_response(message="Account is disabled", status_code=status.HTTP_403_FORBIDDEN)
+
+            refresh = RefreshToken.for_user(user)
+            refresh['role'] = getattr(user, 'role', 'sender')
+            refresh['email'] = user.email
+            refresh['is_verified'] = getattr(user, 'is_verified', True)
+
+            tokens = {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+
+            full_name = f"{user.first_name} {user.last_name}".strip() or email.split('@')[0]
+            user_data = {
+                'id': str(user.id),
+                'email': user.email,
+                'name': full_name,
+                'role': getattr(user, 'role', 'sender'),
+                'is_verified': getattr(user, 'is_verified', True)
+            }
+
+            kyc_status = getattr(user.profile, 'kyc_status', 'NOT_SUBMITTED') if hasattr(user, 'profile') else 'NOT_SUBMITTED'
+
+            return success_response(
+                data={
+                    'tokens': tokens,
+                    'user': user_data,
+                    'userId': str(user.id),
+                    'fullName': full_name,
+                    'email': user.email,
+                    'role': user_data['role'],
+                    'kycStatus': kyc_status
+                },
+                message="Google login successful"
+            )
+
+        except Exception as e:
+            import logging, traceback
+            logging.getLogger(__name__).error(f"Google login failed: {e}\n{traceback.format_exc()}")
+            return failure_response(
+                message=f"Google authentication failed: {str(e)}",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
 

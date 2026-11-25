@@ -18,6 +18,7 @@ class BookingSerializer(serializers.ModelSerializer):
     escrow = serializers.SerializerMethodField()
     accepted_parcel_types = serializers.SerializerMethodField()
     delivery_otp = serializers.SerializerMethodField()
+    delivery_qr_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -25,7 +26,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'id', 'sender_name', 'traveler_name', 'trip', 'sender_trip',
             'package_name', 'package_category', 'package_image',
             'receiver_name', 'receiver_address', 'receiver_phone', 'delivery_date',
-            'weight', 'reward', 'trip_price_per_kg', 'status', 'payment_status', 'escrow_status', 'delivery_otp',
+            'weight', 'reward', 'trip_price_per_kg', 'status', 'payment_status', 'escrow_status', 'delivery_otp', 'delivery_qr_code',
             'created_at', 'updated_at',
             'package', 'route', 'sender', 'traveler', 'receiver',
             'createdAt', 'paymentStatus', 'escrow', 'accepted_parcel_types'
@@ -73,6 +74,34 @@ class BookingSerializer(serializers.ModelSerializer):
             return '123456'
         except Exception:
             return '123456'
+
+    def get_delivery_qr_code(self, obj) -> str:
+        """
+        Generates actual Base64 Data-URI PNG QR Code from backend.
+        Encodes FLYORA-DELIVERY:<bookingId>:<otp> for instant verification upon camera scanning.
+        """
+        try:
+            import qrcode, io, base64
+            otp = self.get_delivery_otp(obj)
+            booking_id = obj.id if getattr(obj, 'id', None) else 1
+            payload = f"FLYORA-DELIVERY:{booking_id}:{otp}"
+
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_M,
+                box_size=8,
+                border=2,
+            )
+            qr.add_data(payload)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            return f"data:image/png;base64,{b64}"
+        except Exception as e:
+            return ""
 
     def get_accepted_parcel_types(self, obj) -> list:
         if obj.trip and hasattr(obj.trip, 'accepted_parcel_types') and obj.trip.accepted_parcel_types:

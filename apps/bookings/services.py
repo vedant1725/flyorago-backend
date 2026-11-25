@@ -331,7 +331,20 @@ class BookingWorkflowService:
         if booking.status not in ['OUT_FOR_DELIVERY', 'ARRIVED', 'IN_TRANSIT']:
             raise ValueError(f"Cannot complete delivery from status {booking.status}")
             
-        if booking.delivery_otp and str(booking.delivery_otp).strip() != str(otp).strip():
+        # Parse otp if full QR token payload was passed
+        clean_otp = str(otp or '').strip()
+        if 'FLYORA-DELIVERY:' in clean_otp:
+            parts = clean_otp.split(':')
+            if len(parts) >= 3:
+                clean_otp = parts[2].strip()
+        elif 'FLYORA-OTP-' in clean_otp:
+            clean_otp = clean_otp.replace('FLYORA-OTP-', '').strip()
+
+        expected_otp = str(booking.delivery_otp or '').strip()
+        if not expected_otp and booking.id:
+            expected_otp = str((booking.id * 3791 + 100000) % 900000 + 100000)
+
+        if expected_otp and clean_otp != expected_otp:
             raise ValueError("Invalid verification OTP or QR token")
             
         booking.status = 'DELIVERED'
@@ -392,6 +405,7 @@ class BookingWorkflowService:
         from wallet.models import Wallet as WModel, Transaction as TxModel
         from payments.models import SystemSetting, PaymentRecord
         from decimal import Decimal
+        import random
 
         fee_str = SystemSetting.get_setting("platform_fee", "10.00")
         platform_fee = Decimal(fee_str)

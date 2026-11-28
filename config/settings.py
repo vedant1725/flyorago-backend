@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'trust_scores',
     'luggage_sharing',
     'ai_assistant',
+    'community',
 ]
 
 MIDDLEWARE = [

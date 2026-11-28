@@ -34,6 +34,7 @@ class RunMigrationsView(APIView):
 urlpatterns = [
     path('api/locations/search/', LocationSearchView.as_view(), name='global_location_search'),
     path('api/locations/search', LocationSearchView.as_view(), name='global_location_search_noslash'),
+    path('api/community/', include('community.urls')),
     path('api/admin/run-migrations/', RunMigrationsView.as_view(), name='run_migrations'),
     path('', api_root, name='api_root'),
     path('admin/', admin.site.urls),
